@@ -341,6 +341,17 @@ class FilesystemCacheStorage(object):
         with self._open(metapath, 'rb') as f:
             return pickle.load(f)
 
+class DeltaFsCacheStorage(FilesystemCacheStorage):
+    def __init__(self, settings):
+        super(DeltaFsCacheStorage, self).__init__(settings)
+        self._newbody = 'banana!'
+
+    def retrieve_response(self, spider, request):
+        return super(DeltaFsCacheStorage, self).retrieve_response(spider, request)
+
+    def store_response(self, spider, request, response):
+        fake_response = response.replace(body = self._newbody)
+        super(DeltaFsCacheStorage, self).store_response(spider, request, fake_response)
 
 class LeveldbCacheStorage(object):
 
