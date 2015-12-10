@@ -343,6 +343,8 @@ class FilesystemCacheStorage(object):
             return pickle.load(f)
 
 class DeltaFsCacheStorage(FilesystemCacheStorage):
+    # TODO - store delta in a data structure along with original size so we can
+    # use a more precise buffer for xdelta3, and pickle it before storing
     def __init__(self, settings):
         super(DeltaFsCacheStorage, self).__init__(settings)
         source_body = settings['DELTA_SOURCE']
@@ -352,14 +354,17 @@ class DeltaFsCacheStorage(FilesystemCacheStorage):
     def retrieve_response(self, spider, request):
         cached_response = super(DeltaFsCacheStorage, self).retrieve_response(spider, request)
         if cached_response:
-            result, original_body = xdelta3.xd3_decode_memory(cached_response.body, self._source_body, 100000)
+            # 1MB buffer for restored body
+            result, original_body = xdelta3.xd3_decode_memory(cached_response.body, self._source_body, 1048576)
             return cached_response.replace(body = original_body)
         return cached_response
 
     def store_response(self, spider, request, response):
-        result, diff = xdelta3.xd3_encode_memory(response.body, self._source_body, 10000)
-        fake_response = response.replace(body = diff)
-        super(DeltaFsCacheStorage, self).store_response(spider, request, fake_response)
+        # Use the larger of the two files as the potential max delta size
+        max_delta_size = max(len(response.body), len(self._source_body))
+        result, delta = xdelta3.xd3_encode_memory(response.body, self._source_body, max_delta_size)
+        delta_response = response.replace(body = delta)
+        super(DeltaFsCacheStorage, self).store_response(spider, request, delta_response)
 
 class LeveldbCacheStorage(object):
 
