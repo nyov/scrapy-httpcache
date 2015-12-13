@@ -15,6 +15,7 @@ from scrapy.utils.request import request_fingerprint
 from scrapy.utils.project import data_path
 from scrapy.utils.httpobj import urlparse_cached
 from scrapy.utils.python import to_bytes, to_unicode, garbage_collect
+from scrapy.utils.misc import load_object
 
 
 logger = logging.getLogger(__name__)
@@ -365,6 +366,75 @@ class DeltaFsCacheStorage(FilesystemCacheStorage):
         result, delta = xdelta3.xd3_encode_memory(response.body, self._source_body, max_delta_size)
         delta_response = response.replace(body = delta)
         super(DeltaFsCacheStorage, self).store_response(spider, request, delta_response)
+
+class DeltaCacheStorage(object):
+    def __init__(self, settings):
+        if not settings.get('DELTA_STORAGE'):
+            raise NotConfigured
+        self.storage = load_object(settings['DELTA_STORAGE'])(settings)
+        self.cachedir = data_path(settings['HTTPCACHE_DIR'])
+        # Leave out the headers for now: they're an object, and they'll need to
+        # exist in their original form in order for copying/replacing responses
+        # to work properly.
+        self.to_delta = ['body', 'url']
+        self._old_source_response = None
+        self._new_source_response = None
+
+    def open_spider(self, spider):
+        # Set up the old source response if it exists
+        source_path = os.path.join(self.cachedir, '%s.delta_cache' % spider.name)
+        if os.path.exists(source_path):
+            with open(source_path, 'rb') as f:
+                self._old_source_response = pickle.load(f)
+        self.storage.open_spider(spider)
+
+    def close_spider(self, spider):
+        # Store the new source response if it exists
+        source_path = os.path.join(self.cachedir, '%s.delta_cache' % spider.name)
+        if self._new_source_response:
+            with open(source_path, 'wb') as f:
+                pickle.dump(self._new_source_response, f, protocol=2)
+        self.storage.close_spider(spider)
+
+    def retrieve_response(self, spider, request):
+        cached_response = None
+        if self._old_source_response:
+            cached_response = self.storage.retrieve_response(spider, request)
+        if cached_response:
+            return self._decode_response(cached_response)
+        return cached_response
+
+    def store_response(self, spider, request, response):
+        # For now, use the first response we get as the new source
+        # TODO - how can we limit this check to only the first time
+        # store_response is called?
+        # TODO - find a way to limit the new source to the old source.
+        # What conditions do we use for setting the response?
+        # - same urls?
+        if not self._new_source_response:
+            self._new_source_response = response.copy()
+        delta_response = self._encode_response(response)
+        self.storage.store_response(spider, request, delta_response)
+
+    def _encode_response(self, response):
+        delta_contents = {}
+        for x in self.to_delta:
+            # Encode using the new source response
+            source = getattr(self._new_source_response, x)
+            target = getattr(response, x)
+            buf_size = max(len(target), len(source)) * 2
+            result, delta_contents[x] = xdelta3.xd3_encode_memory(target, source, buf_size)
+        return response.replace(**delta_contents)
+
+    def _decode_response(self, response):
+        restored_contents = {}
+        for x in self.to_delta:
+            # Decode using the old source response
+            source = getattr(self._old_source_response, x)
+            delta = getattr(response, x)
+            buf_size = 1000000
+            result, restored_contents[x] = xdelta3.xd3_decode_memory(delta, source, buf_size)
+        return response.replace(**restored_contents)
 
 class LeveldbCacheStorage(object):
 
