@@ -373,15 +373,15 @@ class DeltaCacheStorage(object):
             raise NotConfigured
         self.storage = load_object(settings['DELTA_STORAGE'])(settings)
         self.cachedir = data_path(settings['HTTPCACHE_DIR'])
-        # Leave out the headers for now: they're an object, and they'll need to
-        # exist in their original form in order for copying/replacing responses
-        # to work properly.
-        self.to_delta = ['body', 'url']
+        # NOTE - Leave out the headers for now: Headers is a CaselessDict subclass
+        # (see scrapy.http.Headers), and we'll need to handle encoding and decoding
+        # deltas for contents.
+        self.to_delta = ['body']
         self._old_source_response = None
         self._new_source_response = None
 
     def open_spider(self, spider):
-        # Set up the old source response if it exists
+        # Set up the old source response if it exists.
         source_path = os.path.join(self.cachedir, '%s.delta_cache' % spider.name)
         if os.path.exists(source_path):
             with open(source_path, 'rb') as f:
@@ -389,7 +389,9 @@ class DeltaCacheStorage(object):
         self.storage.open_spider(spider)
 
     def close_spider(self, spider):
-        # Store the new source response if it exists
+        # Store the new source response if it exists. If all cache lookups are
+        # hits, self._new_source_response will be None, so we need to check if
+        # actually exists before overwriting the old source response.
         source_path = os.path.join(self.cachedir, '%s.delta_cache' % spider.name)
         if self._new_source_response:
             with open(source_path, 'wb') as f:
@@ -408,9 +410,7 @@ class DeltaCacheStorage(object):
         # For now, use the first response we get as the new source
         # TODO - how can we limit this check to only the first time
         # store_response is called?
-        # TODO - find a way to limit the new source to the old source.
-        # What conditions do we use for setting the response?
-        # - same urls?
+        # Ugly, but it works for testing.
         if not self._new_source_response:
             self._new_source_response = response.copy()
         delta_response = self._encode_response(response)
@@ -432,7 +432,10 @@ class DeltaCacheStorage(object):
             # Decode using the old source response
             source = getattr(self._old_source_response, x)
             delta = getattr(response, x)
-            buf_size = 1000000
+            # Use 1MB for buffer size for now.
+            # TODO - come up with a way to estimate buffer size, len(source) +
+            # len(delta) doesn't work well.
+            buf_size = 1048576
             result, restored_contents[x] = xdelta3.xd3_decode_memory(delta, source, buf_size)
         return response.replace(**restored_contents)
 
