@@ -2,7 +2,6 @@ from __future__ import print_function
 import os
 import gzip
 import logging
-import xdelta3
 from six.moves import cPickle as pickle
 from importlib import import_module
 from time import time
@@ -347,6 +346,7 @@ class DeltaFsCacheStorage(FilesystemCacheStorage):
     # TODO - store delta in a data structure along with original size so we can
     # use a more precise buffer for xdelta3, and pickle it before storing
     def __init__(self, settings):
+        import xdelta3
         super(DeltaFsCacheStorage, self).__init__(settings)
         source_body = settings['DELTA_SOURCE']
         with open(os.path.join(self.cachedir, source_body), 'rb') as f:
@@ -369,8 +369,10 @@ class DeltaFsCacheStorage(FilesystemCacheStorage):
 
 class DeltaCacheStorage(object):
     def __init__(self, settings):
+        import xdelta3
         if not settings.get('DELTA_STORAGE'):
             raise NotConfigured
+        self._xdelta3 = xdelta3
         self.storage = load_object(settings['DELTA_STORAGE'])(settings)
         self.cachedir = data_path(settings['HTTPCACHE_DIR'])
         # NOTE - Leave out the headers for now: Headers is a CaselessDict subclass
@@ -399,6 +401,9 @@ class DeltaCacheStorage(object):
         self.storage.close_spider(spider)
 
     def retrieve_response(self, spider, request):
+        # We only want to retrieve the cached response if we have some
+        # source response to use for decoding. Otherwise things would break
+        # if we tried to use DeltaStorage with an existing non-delta cache.
         cached_response = None
         if self._old_source_response:
             cached_response = self.storage.retrieve_response(spider, request)
@@ -423,7 +428,7 @@ class DeltaCacheStorage(object):
             source = getattr(self._new_source_response, x)
             target = getattr(response, x)
             buf_size = max(len(target), len(source)) * 2
-            result, delta_contents[x] = xdelta3.xd3_encode_memory(target, source, buf_size)
+            result, delta_contents[x] = self._xdelta3.xd3_encode_memory(target, source, buf_size)
         return response.replace(**delta_contents)
 
     def _decode_response(self, response):
@@ -436,7 +441,7 @@ class DeltaCacheStorage(object):
             # TODO - come up with a way to estimate buffer size, len(source) +
             # len(delta) doesn't work well.
             buf_size = 1048576
-            result, restored_contents[x] = xdelta3.xd3_decode_memory(delta, source, buf_size)
+            result, restored_contents[x] = self._xdelta3.xd3_decode_memory(delta, source, buf_size)
         return response.replace(**restored_contents)
 
 class LeveldbCacheStorage(object):
