@@ -519,18 +519,18 @@ class LeveldbCacheStorage(object):
 
 class LeveldbDeltaCacheStorage(object):
     def __init__(self, settings):
+        import leveldb
         import xdelta3
+        self._leveldb = leveldb
         self._xdelta3 = xdelta3
+        self.cachedir = data_path(settings['HTTPCACHE_DIR'], createdir=True)
+        self.expiration_secs = settings.getint('HTTPCACHE_EXPIRATION_SECS')
+        self.db = None
         self._old_source_response = None
         self._new_source_response = None
         # List of properties from request and response objects to store in cache
         self.request_to_cache = ['url']
         self.response_to_cache = ['status', 'headers', 'body']
-        import leveldb
-        self._leveldb = leveldb
-        self.cachedir = data_path(settings['HTTPCACHE_DIR'], createdir=True)
-        self.expiration_secs = settings.getint('HTTPCACHE_EXPIRATION_SECS')
-        self.db = None
 
     def open_spider(self, spider):
         # Set up the old source response if it exists.
@@ -611,7 +611,7 @@ class LeveldbDeltaCacheStorage(object):
         return json.dumps(dict_response, encoding='utf-8', indent=2, separators=(',', ': '))
 
     def _deserialize(self, serial_response):
-        dict_response = json.loads(serial_response, object_pairs_hook=OrderedDict)
+        dict_response = json.loads(serial_response, encoding='utf-8', object_pairs_hook=OrderedDict)
         dict_response['url'] = to_bytes(dict_response['url'], encoding='utf-8')
         dict_response['body'] = to_bytes(dict_response['body'], encoding='utf-8')
         return dict_response
