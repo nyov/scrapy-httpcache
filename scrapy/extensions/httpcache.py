@@ -425,16 +425,19 @@ class LeveldbDeltaCacheStorage(object):
         self.db = None
         self._old_source_response = None
         self._new_source_response = None
+        self._new_source_request = None
+        # Dictionary of sources with each source having a set of targets
+        self.sources = None
         # List of properties from request and response objects to store in cache
         self.request_to_cache = ['url']
         self.response_to_cache = ['status', 'headers', 'body']
 
     def open_spider(self, spider):
         # Set up the old source response if it exists.
-        source_path = os.path.join(self.cachedir, '%s.delta_source' % spider.name)
-        if os.path.exists(source_path):
-            with open(source_path, 'rb') as f:
-                self._old_source_response = f.read()
+        #source_path = os.path.join(self.cachedir, '%s.delta_source' % spider.name)
+        #if os.path.exists(source_path):
+        #    with open(source_path, 'rb') as f:
+        #        self._old_source_response = f.read()
         dbpath = os.path.join(self.cachedir, '%s.leveldb' % spider.name)
         self.db = self._leveldb.LevelDB(dbpath)
 
@@ -442,10 +445,11 @@ class LeveldbDeltaCacheStorage(object):
         # Store the new source response if it exists. If all cache lookups are
         # hits, self._new_source_response will be None, so we need to check if
         # actually exists before overwriting the old source response.
-        if self._new_source_response:
-            source_path = os.path.join(self.cachedir, '%s.delta_source' % spider.name)
-            with open(source_path, 'wb') as f:
-                f.write(self._new_source_response)
+        #if self._new_source_response:
+        #    source_path = os.path.join(self.cachedir, '%s.delta_source' % spider.name)
+        #    with open(source_path, 'wb') as f:
+        #        f.write(self._new_source_response)
+
         # Do compactation each time to save space and also recreate files to
         # avoid them being removed in storages with timestamp-based autoremoval.
         self.db.CompactRange()
@@ -477,11 +481,17 @@ class LeveldbDeltaCacheStorage(object):
         serial_response = self._serialize(request, response)
         if not self._new_source_response:
             self._new_source_response = serial_response
+            self._new_source_request = request
+            master_key = self._request_key(request)
+            self.sources = dict()
+            self.sources[master_key] = set()
+        master_key = self._request_key(self._new_source_request)
         delta_response = self._encode_response(serial_response)
-        key = self._request_key(request)
+        target_key = self._request_key(request)
+        self.sources[master_key].add(target_key)
         batch = self._leveldb.WriteBatch()
-        batch.Put(key + b'_data', delta_response)
-        batch.Put(key + b'_time', to_bytes(str(time())))
+        batch.Put(master_key + b'_data', pickle.dumps(self.sources,2))
+        batch.Put(master_key + b'_time', to_bytes(str(time())))
         self.db.Write(batch)
 
     def _encode_response(self, serial_response):
