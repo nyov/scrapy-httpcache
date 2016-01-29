@@ -423,10 +423,11 @@ class LeveldbDeltaCacheStorage(object):
         self.cachedir = data_path(settings['HTTPCACHE_DIR'], createdir=True)
         self.expiration_secs = settings.getint('HTTPCACHE_EXPIRATION_SECS')
         self.db = None
-        self._old_source_response = None
+        #self._old_source_response = None
+        # Holding the response and request of the source
         self._new_source_response = None
         self._new_source_request = None
-        # Dictionary of sources with each source having a set of targets
+        # Dictionary of sources with each source having a set of target fingerprints
         self.sources = None
         # List of properties from request and response objects to store in cache
         self.request_to_cache = ['url']
@@ -460,7 +461,7 @@ class LeveldbDeltaCacheStorage(object):
         # source response to use for decoding. Otherwise things would break
         # if we tried to use DeltaStorage with an existing non-delta cache.
         delta_response = None
-        if self._old_source_response:
+        if self._new_source_response:
             delta_response = self._read_data(spider, request)
         if delta_response is None:
             return # not cached
@@ -490,7 +491,9 @@ class LeveldbDeltaCacheStorage(object):
         target_key = self._request_key(request)
         self.sources[master_key].add(target_key)
         batch = self._leveldb.WriteBatch()
-        batch.Put(master_key + b'_data', pickle.dumps(self.sources,2))
+        batch.Put(target_key + b'_data', delta_response)
+        batch.Put(target_key + b'_time', to_bytes(str(time())))
+        batch.Put(master_key + b'_data', pickle.dumps(self.sources, 2))
         batch.Put(master_key + b'_time', to_bytes(str(time())))
         self.db.Write(batch)
 
@@ -502,7 +505,7 @@ class LeveldbDeltaCacheStorage(object):
         return delta_contents
 
     def _decode_response(self, delta_response):
-        source = self._old_source_response
+        source = self._new_source_response
         delta = delta_response
         # TODO - come up with a way to estimate buffer size
         buf_size = 1048576
@@ -524,19 +527,29 @@ class LeveldbDeltaCacheStorage(object):
         return dict_response
 
     def _read_data(self, spider, request):
-        key = self._request_key(request)
+        master_key = self._request_key(self._new_source_request)
+        target_key = self._request_key(request)
         try:
-            ts = self.db.Get(key + b'_time')
+            ts = self.db.Get(master_key + b'_time')
         except KeyError:
             return  # not found or invalid entry
         if 0 < self.expiration_secs < time() - float(ts):
             return  # expired
         try:
-            data = self.db.Get(key + b'_data')
+            source_dict = self.db.Get(master_key + b'_data')
+            sources = pickle.loads(source_dict)
+            # When we have multiple sources, we search through the sources also
+            data = None
+            for item in sources[master_key]:
+                if item == target_key:
+                    data = item
+            if data is None:
+                return  # this shouldn't happen, but just in case
+            delta_response = self.db.Get(data + b'_data')
         except KeyError:
             return  # invalid entry
         else:
-            return data
+            return delta_response
 
     def _request_key(self, request):
         return to_bytes(request_fingerprint(request))
