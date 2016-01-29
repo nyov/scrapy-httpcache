@@ -15,8 +15,6 @@ from scrapy.utils.project import data_path
 from scrapy.utils.httpobj import urlparse_cached
 from scrapy.utils.python import to_bytes, to_unicode, garbage_collect
 from scrapy.utils.misc import load_object
-from collections import OrderedDict
-import json
 
 
 logger = logging.getLogger(__name__)
@@ -430,8 +428,7 @@ class LeveldbDeltaCacheStorage(object):
         # Dictionary of sources with each source having a set of target fingerprints
         self.sources = None
         # List of properties from request and response objects to store in cache
-        self.request_to_cache = ['url']
-        self.response_to_cache = ['status', 'headers', 'body']
+        self.response_to_cache = ['status', 'url', 'headers', 'body']
 
     def open_spider(self, spider):
         # Set up the old source response if it exists.
@@ -513,18 +510,10 @@ class LeveldbDeltaCacheStorage(object):
         return restored_contents
 
     def _serialize(self, request, response):
-        dict_response = OrderedDict()
-        for item in self.request_to_cache:
-            dict_response[item] = getattr(request, item)
-        for item in self.response_to_cache:
-            dict_response[item] = getattr(response, item)
-        return json.dumps(dict_response, encoding='utf-8', indent=2, separators=(',', ': '))
+        return pickle.dumps({k: getattr(response, k) for k in self.response_to_cache}, 2)
 
     def _deserialize(self, serial_response):
-        dict_response = json.loads(serial_response, encoding='utf-8', object_pairs_hook=OrderedDict)
-        dict_response['url'] = to_bytes(dict_response['url'], encoding='utf-8')
-        dict_response['body'] = to_bytes(dict_response['body'], encoding='utf-8')
-        return dict_response
+        return pickle.loads(serial_response)
 
     def _read_data(self, spider, request):
         master_key = self._request_key(self._new_source_request)
