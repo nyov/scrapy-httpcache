@@ -6,6 +6,7 @@ from six.moves import cPickle as pickle
 from importlib import import_module
 from time import time
 from weakref import WeakKeyDictionary
+from collections import OrderedDict
 from email.utils import mktime_tz, parsedate_tz
 from w3lib.http import headers_raw_to_dict, headers_dict_to_raw
 from scrapy.http import Headers, Response
@@ -14,7 +15,6 @@ from scrapy.utils.request import request_fingerprint
 from scrapy.utils.project import data_path
 from scrapy.utils.httpobj import urlparse_cached
 from scrapy.utils.python import to_bytes, to_unicode, garbage_collect
-from scrapy.utils.misc import load_object
 
 
 logger = logging.getLogger(__name__)
@@ -510,7 +510,10 @@ class LeveldbDeltaCacheStorage(object):
         return restored_contents
 
     def _serialize(self, request, response):
-        return pickle.dumps({k: getattr(response, k) for k in self.response_to_cache}, 2)
+        dict_response = OrderedDict()
+        for k in self.response_to_cache:
+            dict_response[k] = getattr(response, k)
+        return pickle.dumps(dict_response, 2)
 
     def _deserialize(self, serial_response):
         return pickle.loads(serial_response)
