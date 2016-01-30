@@ -449,6 +449,7 @@ class LeveldbDeltaCacheStorage(object):
             key = spider.name
             batch = self._leveldb.WriteBatch()
             batch.Put(key + b'_data', self._new_source_response)
+            self.db.Write(batch)
         # Do compactation each time to save space and also recreate files to
         # avoid them being removed in storages with timestamp-based autoremoval.
         self.db.CompactRange()
@@ -499,8 +500,8 @@ class LeveldbDeltaCacheStorage(object):
         batch = self._leveldb.WriteBatch()
         batch.Put(target_key + b'_data', delta_response)
         batch.Put(target_key + b'_time', to_bytes(str(time())))
-        batch.Put(master_key + b'_data', pickle.dumps(self.sources, 2))
-        batch.Put(master_key + b'_time', to_bytes(str(time())))
+        #batch.Put(master_key + b'_data', pickle.dumps(self.sources, 2))
+        #batch.Put(master_key + b'_time', to_bytes(str(time())))
         self.db.Write(batch)
 
     def _encode_response(self, serial_response):
