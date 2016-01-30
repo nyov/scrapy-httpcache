@@ -19,6 +19,9 @@ from scrapy.utils.python import to_bytes, to_unicode, garbage_collect
 
 logger = logging.getLogger(__name__)
 
+# Debug stuff
+import pprint
+
 
 class DummyPolicy(object):
 
@@ -421,7 +424,7 @@ class LeveldbDeltaCacheStorage(object):
         self.cachedir = data_path(settings['HTTPCACHE_DIR'], createdir=True)
         self.expiration_secs = settings.getint('HTTPCACHE_EXPIRATION_SECS')
         self.db = None
-        #self._old_source_response = None
+        self._old_source_response = None
         # Holding the response and request of the source
         self._new_source_response = None
         self._new_source_request = None
@@ -432,22 +435,20 @@ class LeveldbDeltaCacheStorage(object):
 
     def open_spider(self, spider):
         # Set up the old source response if it exists.
-        #source_path = os.path.join(self.cachedir, '%s.delta_source' % spider.name)
-        #if os.path.exists(source_path):
-        #    with open(source_path, 'rb') as f:
-        #        self._old_source_response = f.read()
         dbpath = os.path.join(self.cachedir, '%s.leveldb' % spider.name)
         self.db = self._leveldb.LevelDB(dbpath)
+        key = spider.name
+        self._old_source_response = self.db.Get(key + b'_data')
+        
 
     def close_spider(self, spider):
         # Store the new source response if it exists. If all cache lookups are
         # hits, self._new_source_response will be None, so we need to check if
         # actually exists before overwriting the old source response.
-        #if self._new_source_response:
-        #    source_path = os.path.join(self.cachedir, '%s.delta_source' % spider.name)
-        #    with open(source_path, 'wb') as f:
-        #        f.write(self._new_source_response)
-
+        if self._new_source_response:
+            key = spider.name
+            batch = self._leveldb.WriteBatch()
+            batch.Put(key + b'_data', self._new_source_response)
         # Do compactation each time to save space and also recreate files to
         # avoid them being removed in storages with timestamp-based autoremoval.
         self.db.CompactRange()
@@ -458,11 +459,15 @@ class LeveldbDeltaCacheStorage(object):
         # source response to use for decoding. Otherwise things would break
         # if we tried to use DeltaStorage with an existing non-delta cache.
         delta_response = None
-        if self._new_source_response:
+        if self._old_source_response:
             delta_response = self._read_data(spider, request)
         if delta_response is None:
             return # not cached
         serial_response = self._decode_response(delta_response)
+        # Debug printing###################
+        #pp = pprint.PrettyPrinter(indent=4)
+        #pp.pprint(serial_response)
+        ###################################
         data = self._deserialize(serial_response)
         url = data['url']
         status = data['status']
@@ -477,6 +482,10 @@ class LeveldbDeltaCacheStorage(object):
         # TODO - how can we limit this check to only the first time
         # store_response is called?
         serial_response = self._serialize(request, response)
+        # Debug printing #################
+        #pp = pprint.PrettyPrinter(indent=4)
+        #pp.pprint(serial_response)
+        ##################################
         if not self._new_source_response:
             self._new_source_response = serial_response
             self._new_source_request = request
@@ -502,7 +511,7 @@ class LeveldbDeltaCacheStorage(object):
         return delta_contents
 
     def _decode_response(self, delta_response):
-        source = self._new_source_response
+        source = self._old_source_response
         delta = delta_response
         # TODO - come up with a way to estimate buffer size
         buf_size = 1048576
@@ -519,6 +528,21 @@ class LeveldbDeltaCacheStorage(object):
         return pickle.loads(serial_response)
 
     def _read_data(self, spider, request):
+        key = self._request_key(request)
+        try:
+            ts = self.db.Get(key + b'_time')
+        except KeyError:
+            return  # not found or invalid entry
+        if 0 < self.expiration_secs < time() - float(ts):
+            return  # expired
+        try:
+            data = self.db.Get(key + b'_data')
+        except KeyError:
+            return  # invalid entry
+        else:
+            return data
+
+    def _read_db_data(self, spider, request):
         master_key = self._request_key(self._new_source_request)
         target_key = self._request_key(request)
         try:
