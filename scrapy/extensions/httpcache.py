@@ -460,11 +460,12 @@ class LeveldbDeltaCacheStorage(object):
         # source response to use for decoding. Otherwise things would break
         # if we tried to use DeltaStorage with an existing non-delta cache.
         delta_response = None
+        original_length = None
         if self._old_source_response:
-            delta_response = self._read_data(spider, request)
-        if delta_response is None:
+            delta_response, original_length = self._read_delta(spider, request)
+        if delta_response is None or original_length is None:
             return # not cached
-        serial_response = self._decode_response(delta_response)
+        serial_response = self._decode_response(delta_response, original_length)
         # Debug printing###################
         #pp = pprint.PrettyPrinter(indent=4)
         #pp.pprint(serial_response)
@@ -494,12 +495,13 @@ class LeveldbDeltaCacheStorage(object):
             self.sources = dict()
             self.sources[master_key] = set()
         master_key = self._request_key(self._new_source_request)
-        delta_response = self._encode_response(serial_response)
+        delta_response, original_length = self._encode_response(serial_response)
         target_key = self._request_key(request)
         self.sources[master_key].add(target_key)
         batch = self._leveldb.WriteBatch()
         batch.Put(target_key + b'_data', delta_response)
         batch.Put(target_key + b'_time', to_bytes(str(time())))
+        batch.Put(target_key + b'_length', to_bytes(str(original_length)))
         #batch.Put(master_key + b'_data', pickle.dumps(self.sources, 2))
         #batch.Put(master_key + b'_time', to_bytes(str(time())))
         self.db.Write(batch)
@@ -507,15 +509,14 @@ class LeveldbDeltaCacheStorage(object):
     def _encode_response(self, serial_response):
         source = self._new_source_response
         target = serial_response
-        buf_size = max(len(target), len(source)) * 2
+        buf_size = max(len(target), len(source))
         result, delta_contents = self._xdelta3.xd3_encode_memory(target, source, buf_size)
-        return delta_contents
+        return delta_contents, len(target)
 
-    def _decode_response(self, delta_response):
+    def _decode_response(self, delta_response, target_length):
         source = self._old_source_response
         delta = delta_response
-        # TODO - come up with a way to estimate buffer size
-        buf_size = 1048576
+        buf_size = target_length
         result, restored_contents = self._xdelta3.xd3_decode_memory(delta, source, buf_size)
         return restored_contents
 
@@ -528,8 +529,9 @@ class LeveldbDeltaCacheStorage(object):
     def _deserialize(self, serial_response):
         return pickle.loads(serial_response)
 
-    def _read_data(self, spider, request):
-        key = self._request_key(request)
+    # We can use this when we already have a key ahead of time,
+    # i.e. grabbing sources by IP/domain, grabbing a source response.
+    def _read_data(self, spider, key):
         try:
             ts = self.db.Get(key + b'_time')
         except KeyError:
@@ -542,6 +544,27 @@ class LeveldbDeltaCacheStorage(object):
             return  # invalid entry
         else:
             return data
+
+    def _read_delta(self, spider, request):
+        key = self._request_key(request)
+        try:
+            ts = self.db.Get(key + b'_time')
+        except KeyError:
+            return  # not found or invalid entry
+        if 0 < self.expiration_secs < time() - float(ts):
+            return  # expired
+        try:
+            data = self.db.Get(key + b'_data')
+        except KeyError:
+            return  # invalid entry
+        try:
+            length = int(self.db.Get(key + b'_length'))
+        except KeyError:
+            return  # invalid entry
+        except ValueError:
+            return  # invalid entry
+        else:
+            return data, length
 
     def _read_db_data(self, spider, request):
         master_key = self._request_key(self._new_source_request)
