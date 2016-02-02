@@ -411,7 +411,7 @@ class LeveldbCacheStorage(object):
         return to_bytes(request_fingerprint(request))
 
 
-class LeveldbDeltaCacheStorage(object):
+class DeltaLeveldbCacheStorage(object):
 
     def __init__(self, settings):
         import leveldb
@@ -421,12 +421,6 @@ class LeveldbDeltaCacheStorage(object):
         self.cachedir = data_path(settings['HTTPCACHE_DIR'], createdir=True)
         self.expiration_secs = settings.getint('HTTPCACHE_EXPIRATION_SECS')
         self.db = None
-        self._old_source_response = None
-        # Holding the response and request of the source
-        self._new_source_response = None
-        self._new_source_request = None
-        # Dictionary of sources with each source having a set of target fingerprints
-        self.sources = None
         # List of properties from request and response objects to store in cache
         self.response_to_cache = ['status', 'url', 'headers', 'body']
 
@@ -434,34 +428,36 @@ class LeveldbDeltaCacheStorage(object):
         # Set up the old source response if it exists.
         dbpath = os.path.join(self.cachedir, '%s.leveldb' % spider.name)
         self.db = self._leveldb.LevelDB(dbpath)
-        key = spider.name
-        self._old_source_response = self.db.Get(key + b'_data')
 
     def close_spider(self, spider):
-        # Store the new source response if it exists. If all cache lookups are
-        # hits, self._new_source_response will be None, so we need to check if
-        # actually exists before overwriting the old source response.
-        if self._new_source_response:
-            key = spider.name
-            batch = self._leveldb.WriteBatch()
-            batch.Put(key + b'_data', self._new_source_response)
-            self.db.Write(batch)
         # Do compactation each time to save space and also recreate files to
         # avoid them being removed in storages with timestamp-based autoremoval.
         self.db.CompactRange()
         del self.db
 
     def retrieve_response(self, spider, request):
-        # We only want to retrieve the cached response if we have some
-        # source response to use for decoding. Otherwise things would break
-        # if we tried to use DeltaStorage with an existing non-delta cache.
+        domain = self._parse_domain_from_url(spider, spider.name)
+        sources = self._read_data(spider, domain)
+        # Explicitly declare these as None, since they're used for controlling logic.
         delta_response = None
         original_length = None
-        if self._old_source_response:
-            delta_response, original_length = self._read_delta(spider, request)
-        if delta_response is None or original_length is None:
-            return  # not cached
-        serial_response = self._decode_response(delta_response, original_length)
+        serial_response = None
+        delta_response, original_length = self._read_delta(spider, request)
+        # Check if we have some sources to look through and if we have a previous delta
+        if sources and delta_response and original_length:
+            sources = pickle.loads(sources)
+            # Grab our key
+            target_key = self._request_key(request)
+            # Iterate over every source in our sources
+            for source in sources.keys():
+                # If we found our request's key in our sources, decode it and stop looking.
+                if target_key in sources[source]:
+                    serial_source = self._read_data(spider, source)
+                    serial_response = self._decode_response(delta_response, serial_source, original_length)
+                    break
+        # If this condition is true, we didn't find a cached response and return
+        if not serial_response:
+            return
         data = self._deserialize(serial_response)
         url = data['url']
         status = data['status']
@@ -472,37 +468,75 @@ class LeveldbDeltaCacheStorage(object):
         return response
 
     def store_response(self, spider, request, response):
-        # For now, use the first response we get as the new source
-        # TODO - how can we limit this check to only the first time
-        # store_response is called?
-        serial_response = self._serialize(request, response)
-        if not self._new_source_response:
-            self._new_source_response = serial_response
-            self._new_source_request = request
-            master_key = self._request_key(request)
-            self.sources = dict()
-            self.sources[master_key] = set()
-        master_key = self._request_key(self._new_source_request)
-        delta_response, original_length = self._encode_response(serial_response)
         target_key = self._request_key(request)
-        self.sources[master_key].add(target_key)
+        target_response = self._serialize(request, response)
+        # use this to control if we write a length or not
+        original_length = None
+        domain = self._parse_domain_from_url(spider, spider.name)
+        # get the pickled data structure of sources from the db
+        sources = self._read_data(spider, domain)
+        # if we have sources, grab a source and delta against it:
+        if sources:
+            sources = pickle.loads(sources)
+            # If we're a source response, check if we're different than what's
+            # in the DB. If we are, recompute the deltas for the targets associated
+            # with the source
+            if target_key in sources:
+                # Grab the original
+                source_response = self._read_data(spider, target_key)
+                # Check if the new source is different from the old
+                delta, junk = self._encode_response(target_response, source_response)
+                # If the length of the delta is non-zero, do the reencode.
+                if len(delta) != 0:
+                    self._recompute_deltas(target_response, target_key, sources[target_key])
+            # Otherwise we store the response as usual
+            else:
+                # Select an appropriate source
+                source_key = self._select_source(target_response, sources)
+                # get the source from the db directly. We don't need an associated
+                # request because we already have the fingerprint/key.
+                source_response = self._read_data(spider, source_key)
+                # overwrite target_response ref with the delta
+                target_response, original_length = self._encode_response(target_response, source_response)
+                # add the target's key to the source's set
+                sources[source_key].add(target_key)
+        # otherwise create a new dictionary for our sources and use the current
+        # response as a source
+        else:
+            sources = {target_key: set()}
+        # Write the changes out to the db.
+        # - In the event that we don't have any sources for this domain,
+        #   we'll write out the serialized response and the sources
+        #   dict we just created.
+        # - If we do have sources, we'll write out the delta'd response and the
+        #   change to the sources dict.
         batch = self._leveldb.WriteBatch()
-        batch.Put(target_key + b'_data', delta_response)
+        batch.Put(target_key + b'_data', target_response)
         batch.Put(target_key + b'_time', to_bytes(str(time())))
-        batch.Put(target_key + b'_length', to_bytes(str(original_length)))
+        batch.Put(domain + b'_data', pickle.dumps(sources, protocol=2))
+        batch.Put(domain + b'_time', to_bytes(str(time())))
+        if original_length:
+            batch.Put(target_key + b'_length', to_bytes(str(original_length)))
         self.db.Write(batch)
 
-    def _encode_response(self, serial_response):
-        source = self._new_source_response
-        target = serial_response
+    # Placeholder for now
+    def _parse_domain_from_url(self, spider, url):
+        return url
+
+    # Placeholder for now
+    def _select_source(self, target, sources):
+        return sources.keys()[0]
+
+    # Placeholder for now
+    def _recompute_deltas(self, new_source, key, target_set):
+        print('Chopper Dave says uh-oh, shouldn\'t hit this yet!\n')
+
+    def _encode_response(self, target, source):
         buf_size = max(len(target), len(source))
         result, delta_contents = self._xdelta3.xd3_encode_memory(target, source, buf_size)
         return delta_contents, len(target)
 
-    def _decode_response(self, delta_response, target_length):
-        source = self._old_source_response
-        delta = delta_response
-        buf_size = target_length
+    def _decode_response(self, delta, source, buf_size):
         result, restored_contents = self._xdelta3.xd3_decode_memory(delta, source, buf_size)
         return restored_contents
 
@@ -536,46 +570,21 @@ class LeveldbDeltaCacheStorage(object):
         try:
             ts = self.db.Get(key + b'_time')
         except KeyError:
-            return  # not found or invalid entry
+            return None, None  # not found or invalid entry
         if 0 < self.expiration_secs < time() - float(ts):
-            return  # expired
+            return None, None  # expired
         try:
             data = self.db.Get(key + b'_data')
         except KeyError:
-            return  # invalid entry
+            return None, None  # invalid entry
         try:
             length = int(self.db.Get(key + b'_length'))
         except KeyError:
-            return  # invalid entry
+            return None, None  # invalid entry
         except ValueError:
-            return  # invalid entry
+            return None, None  # invalid entry
         else:
             return data, length
-
-    def _read_db_data(self, spider, request):
-        master_key = self._request_key(self._new_source_request)
-        target_key = self._request_key(request)
-        try:
-            ts = self.db.Get(master_key + b'_time')
-        except KeyError:
-            return  # not found or invalid entry
-        if 0 < self.expiration_secs < time() - float(ts):
-            return  # expired
-        try:
-            source_dict = self.db.Get(master_key + b'_data')
-            sources = pickle.loads(source_dict)
-            # When we have multiple sources, we search through the sources also
-            data = None
-            for item in sources[master_key]:
-                if item == target_key:
-                    data = item
-            if data is None:
-                return  # this shouldn't happen, but just in case
-            delta_response = self.db.Get(data + b'_data')
-        except KeyError:
-            return  # invalid entry
-        else:
-            return delta_response
 
     def _request_key(self, request):
         return to_bytes(request_fingerprint(request))
