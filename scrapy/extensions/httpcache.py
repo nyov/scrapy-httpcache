@@ -458,8 +458,7 @@ class DeltaLeveldbCacheStorage(object):
         # If this condition is true, we didn't find a cached response and return
         if not serial_response:
             return
-        data = self._deserialize(serial_response)
-        return self._reconstruct_response(data)
+        return self._reconstruct_response(serial_response)
 
     def store_response(self, spider, request, response):
         target_key = self._request_key(request)
@@ -478,8 +477,7 @@ class DeltaLeveldbCacheStorage(object):
             if target_key in sources:
                 # Grab the original and restore it
                 source_response = self._read_data(spider, target_key)
-                deserialized_source = self._deserialize(source_response)
-                old_response = self._reconstruct_response(deserialized_source)
+                old_response = self._reconstruct_response(source_response)
                 # Check if the new source body is different from the old
                 delta, junk = self._encode_response(response.body, old_response.body)
                 # If the length of the delta is non-zero, do the reencode.
@@ -515,7 +513,8 @@ class DeltaLeveldbCacheStorage(object):
             batch.Put(target_key + b'_length', to_bytes(str(original_length)))
         self.db.Write(batch)
 
-    def _reconstruct_response(self, data):
+    def _reconstruct_response(self, serial_response):
+        data = self._deserialize(serial_response)
         url = data['url']
         status = data['status']
         headers = Headers(data['headers'])
