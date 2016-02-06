@@ -488,7 +488,7 @@ class DeltaLeveldbCacheStorage(object):
                 delta, junk = self._encode_response(target_response, source_response)
                 # If the length of the delta is non-zero, do the reencode.
                 if len(delta) != 0:
-                    self._recompute_deltas(target_response, target_key, sources[target_key])
+                    self._recompute_deltas(target_response, source_response, sources[target_key])
             # Otherwise we store the response as usual
             else:
                 # Select an appropriate source
@@ -528,7 +528,12 @@ class DeltaLeveldbCacheStorage(object):
         return sources.keys()[0]
 
     # Placeholder for now
-    def _recompute_deltas(self, new_source, key, target_set):
+    def _recompute_deltas(self, new_source, old_source, target_set):
+        #   For each key in the target set:
+        #       - read the delta _data and _length from the db
+        #       - decode the response with the old source
+        #       - encode the response with the new source
+        #       - write the new _data, _time, and _length to db
         print('Chopper Dave says uh-oh, shouldn\'t hit this yet!\n')
 
     def _encode_response(self, target, source):
