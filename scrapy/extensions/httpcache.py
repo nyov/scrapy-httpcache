@@ -458,7 +458,8 @@ class DeltaLeveldbCacheStorage(object):
         # If this condition is true, we didn't find a cached response and return
         if not serial_response:
             return
-        return self._reconstruct_response(serial_response)
+        data = self._deserialize(serial_response)
+        return self._reconstruct_response(data)
 
     def store_response(self, spider, request, response):
         target_key = self._request_key(request)
