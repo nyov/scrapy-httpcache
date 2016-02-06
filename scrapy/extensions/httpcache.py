@@ -458,14 +458,7 @@ class DeltaLeveldbCacheStorage(object):
         # If this condition is true, we didn't find a cached response and return
         if not serial_response:
             return
-        data = self._deserialize(serial_response)
-        url = data['url']
-        status = data['status']
-        headers = Headers(data['headers'])
-        body = data['body']
-        respcls = responsetypes.from_args(headers=headers, url=url)
-        response = respcls(url=url, headers=headers, status=status, body=body)
-        return response
+        return self._reconstruct_response(serial_response)
 
     def store_response(self, spider, request, response):
         target_key = self._request_key(request)
@@ -482,10 +475,11 @@ class DeltaLeveldbCacheStorage(object):
             # in the DB. If we are, recompute the deltas for the targets associated
             # with the source
             if target_key in sources:
-                # Grab the original
+                # Grab the original and restore it
                 source_response = self._read_data(spider, target_key)
-                # Check if the new source is different from the old
-                delta, junk = self._encode_response(target_response, source_response)
+                old_response = self._reconstruct_response(source_response)
+                # Check if the new source body is different from the old
+                delta, junk = self._encode_response(target_response['body'], old_response['body'])
                 # If the length of the delta is non-zero, do the reencode.
                 if len(delta) != 0:
                     self._recompute_deltas(target_response, source_response, sources[target_key])
@@ -518,6 +512,15 @@ class DeltaLeveldbCacheStorage(object):
         if original_length:
             batch.Put(target_key + b'_length', to_bytes(str(original_length)))
         self.db.Write(batch)
+
+    def _reconstruct_response(self, data):
+        url = data['url']
+        status = data['status']
+        headers = Headers(data['headers'])
+        body = data['body']
+        respcls = responsetypes.from_args(headers=headers, url=url)
+        response = respcls(url=url, headers=headers, status=status, body=body)
+        return response
 
     # Placeholder for now
     def _parse_domain_from_url(self, spider, url):
