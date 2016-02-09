@@ -3,6 +3,7 @@ import os
 import gzip
 import logging
 from six.moves import cPickle as pickle
+from six.moves.urllib.parse import urlparse
 from importlib import import_module
 from time import time
 from weakref import WeakKeyDictionary
