@@ -436,7 +436,7 @@ class DeltaLeveldbCacheStorage(object):
         del self.db
 
     def retrieve_response(self, spider, request):
-        domain = self._parse_domain_from_url(spider, spider.name)
+        domain = self._parse_domain_from_url(spider, request.url)
         sources = self._read_data(spider, domain)
         # Explicitly declare these as None, since they're used for controlling logic.
         delta_response = None
@@ -472,7 +472,7 @@ class DeltaLeveldbCacheStorage(object):
         target_response = self._serialize(request, response)
         # use this to control if we write a length or not
         original_length = None
-        domain = self._parse_domain_from_url(spider, spider.name)
+        domain = self._parse_domain_from_url(spider, request.url)
         # get the pickled data structure of sources from the db
         sources = self._read_data(spider, domain)
         # if we have sources, grab a source and delta against it:
@@ -521,7 +521,11 @@ class DeltaLeveldbCacheStorage(object):
 
     # Placeholder for now
     def _parse_domain_from_url(self, spider, url):
-        return url
+        parsed_url = urlparse(url)
+        if parsed_url.netloc:
+            return parsed_url.netloc
+        else:
+            return spider.name
 
     # Placeholder for now
     def _select_source(self, target, sources):
