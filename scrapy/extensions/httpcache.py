@@ -488,11 +488,8 @@ class DeltaLeveldbCacheStorage(object):
             if target_key in sources:
                 # Grab the original
                 source_response = self._read_data(spider, key_to_use=target_key)
-                # Check if the new source is different from the old
-                delta = self._encode_response(target_response, source_response)
-                # If the length of the delta is non-zero, do the reencode.
-                if len(delta) != 0:
-                    self._recompute_deltas(target_response, source_response, sources[target_key])
+                # Recompute all deltas against the new response
+                self._recompute_deltas(target_response, source_response, sources[target_key])
             # Otherwise we store the response as usual
             else:
                 # Select an appropriate source
