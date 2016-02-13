@@ -442,19 +442,23 @@ class DeltaLeveldbCacheStorage(object):
         # Explicitly declare these as None, since they're used for controlling logic.
         delta_response = None
         serial_response = None
+        data = None
         delta_response = self._read_data(spider, request_to_use=request)
         # Check if we have some sources to look through and if we have a previous delta
         if sources and delta_response:
             sources = pickle.loads(sources)
             # Grab our key
             target_key = self._request_key(request)
-            # Iterate over every source in our sources
-            for source in sources.keys():
-                # If we found our request's key in our sources, decode it and stop looking.
-                if target_key in sources[source]:
-                    serial_source = self._read_data(spider, key_to_use=source)
-                    serial_response = self._decode_response(delta_response, serial_source)
-                    break
+            # if our key is a source, no need to look for a source -- full serialized response is stored
+            if target_key in sources:
+                serial_response = delta_response
+            else:
+                # Iterate over every source in our sources
+                for source in sources.keys():
+                    # If we found our request's key in our sources, decode it and stop looking.
+                    if target_key in sources[source]:
+                        serial_source = self._read_data(spider, key_to_use=source)
+                        serial_response = self._decode_response(delta_response, serial_source)
         # If this condition is true, we didn't find a cached response and return
         if not serial_response:
             return
