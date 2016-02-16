@@ -437,12 +437,12 @@ class DeltaLeveldbCacheStorage(object):
 
     def retrieve_response(self, spider, request):
         domain = self._parse_domain_from_url(spider, request)
-        sources = self._read_data(spider, key_to_use=domain)
+        sources = self._read_data(key_to_use=domain)
         # Explicitly declare these as None, since they're used for controlling logic.
         delta_response = None
         serial_response = None
         data = None
-        delta_response = self._read_data(spider, request_to_use=request)
+        delta_response = self._read_data(request_to_use=request)
         # Check if we have some sources to look through and if we have a previous delta
         if sources and delta_response:
             sources = pickle.loads(sources)
@@ -456,28 +456,23 @@ class DeltaLeveldbCacheStorage(object):
                 for source in sources.keys():
                     # If we found our request's key in our sources, decode it and stop looking.
                     if target_key in sources[source]:
-                        serial_source = self._read_data(spider, key_to_use=source)
+                        serial_source = self._read_data(key_to_use=source)
                         serial_response = self._decode_response(delta_response, serial_source)
         # If this condition is true, we didn't find a cached response and return
         if not serial_response:
             return
         data = self._deserialize(serial_response)
-        url = data['url']
-        status = data['status']
-        headers = Headers(data['headers'])
-        body = data['body']
-        respcls = responsetypes.from_args(headers=headers, url=url)
-        response = respcls(url=url, headers=headers, status=status, body=body)
+        response = self._reconstruct_response(data)
         return response
 
     def store_response(self, spider, request, response):
         target_key = self._request_key(request)
-        target_response = self._serialize(request, response)
+        target_response = self._serialize(response)
         # use this to control if we write a length or not
         original_length = None
         domain = self._parse_domain_from_url(spider, request)
         # get the pickled data structure of sources from the db
-        sources = self._read_data(spider, key_to_use=domain)
+        sources = self._read_data(key_to_use=domain, ignore_time=True)
         # if we have sources, grab a source and delta against it:
         if sources:
             sources = pickle.loads(sources)
@@ -486,7 +481,7 @@ class DeltaLeveldbCacheStorage(object):
             # with the source
             if target_key in sources:
                 # Grab the original
-                source_response = self._read_data(spider, key_to_use=target_key)
+                source_response = self._read_data(key_to_use=target_key, ignore_time=True)
                 # Recompute all deltas against the new response
                 self._recompute_deltas(target_response, source_response, sources[target_key])
             # Otherwise we store the response as usual
@@ -495,7 +490,7 @@ class DeltaLeveldbCacheStorage(object):
                 source_key = self._select_source(target_response, sources)
                 # get the source from the db directly. We don't need an associated
                 # request because we already have the fingerprint/key.
-                source_response = self._read_data(spider, key_to_use=source_key)
+                source_response = self._read_data(key_to_use=source_key, ignore_time=True)
                 # overwrite target_response ref with the delta
                 target_response = self._encode_response(target_response, source_response)
                 # add the target's key to the source's set
@@ -527,12 +522,26 @@ class DeltaLeveldbCacheStorage(object):
 
     # Placeholder for now
     def _recompute_deltas(self, new_source, old_source, target_set):
-        #   For each key in the target set:
-        #       - read the delta _data and _length from the db
-        #       - decode the response with the old source
-        #       - encode the response with the new source
-        #       - write the new _data, _time, and _length to db
-        print('Chopper Dave says uh-oh, shouldn\'t hit this yet!\n')
+        for target_key in target_set:
+            # Get old response from the db
+            old_response = self._read_data(key_to_use=target_key, ignore_time=True)
+            # Decode serialized delta response with old source
+            target_response = self._decode_response(old_response, old_source)
+            # Encode old response with new source
+            new_delta = self._encode_response(target_response, new_source)
+            # Write new target responses to db
+            batch = self._leveldb.WriteBatch()
+            batch.Put(target_key + b'_data', new_delta)
+            self.db.Write(batch)
+
+    def _reconstruct_response(self, data):
+        url = data['url']
+        status = data['status']
+        headers = Headers(data['headers'])
+        body = data['body']
+        respcls = responsetypes.from_args(headers=headers, url=url)
+        response = respcls(url=url, headers=headers, status=status, body=body)
+        return response
 
     def _encode_response(self, target, source):
         delta_contents = self._bsdiff.diff(source, target)
@@ -542,7 +551,7 @@ class DeltaLeveldbCacheStorage(object):
         restored_contents = self._bsdiff.patch(source, delta)
         return restored_contents
 
-    def _serialize(self, request, response):
+    def _serialize(self, response):
         dict_response = OrderedDict()
         for k in self.response_to_cache:
             dict_response[k] = getattr(response, k)
@@ -553,17 +562,18 @@ class DeltaLeveldbCacheStorage(object):
 
     # We can use this when we already have a key ahead of time,
     # i.e. grabbing sources by IP/domain, grabbing a source response.
-    def _read_data(self, spider, request_to_use=None, key_to_use=None):
+    def _read_data(self, request_to_use=None, key_to_use=None, ignore_time=False):
         if key_to_use:
             key = key_to_use
         else:
             key = self._request_key(request_to_use)
-        try:
-            ts = self.db.Get(key + b'_time')
-        except KeyError:
-            return  # not found or invalid entry
-        if 0 < self.expiration_secs < time() - float(ts):
-            return  # expired
+        if not ignore_time:
+            try:
+                ts = self.db.Get(key + b'_time')
+            except KeyError:
+                return  # not found or invalid entry
+            if 0 < self.expiration_secs < time() - float(ts):
+                return  # expired
         try:
             data = self.db.Get(key + b'_data')
         except KeyError:
