@@ -3,7 +3,6 @@ import os
 import gzip
 import logging
 from six.moves import cPickle as pickle
-from six.moves.urllib.parse import urlparse
 from importlib import import_module
 from time import time
 from weakref import WeakKeyDictionary
@@ -520,11 +519,7 @@ class DeltaLeveldbCacheStorage(object):
 
     # Placeholder for now
     def _parse_domain_from_url(self, spider, url):
-        parsed_url = urlparse(url)
-        if parsed_url.netloc:
-            return parsed_url.netloc
-        else:
-            return spider.name
+        return urlparse_cached(url).hostname or spider.name
 
     # Placeholder for now
     def _select_source(self, target, sources):
