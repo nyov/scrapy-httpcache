@@ -162,6 +162,26 @@ In order to use this storage backend:
 .. _leveldb python bindings: https://pypi.python.org/pypi/leveldb
 .. _plyvel bindings: https://plyvel.readthedocs.io/
 
+DeltaLevelDB storage backend
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A Delta encoding storage backend is also available for the HTTP cache middleware.
+
+This backend is based on the LevelDB storage backend, but uses BSDiff4's
+delta encoding to gain additional performance in terms of storage space. The
+algorithm works best when crawling domains that have self-similar pages because
+it is storing a diff of most 'target' pages off of a 'source' page.
+
+In order to use this storage backend:
+
+* set :setting:`HTTPCACHE_STORAGE` to ``scrapy_httpcache.storage.DeltaLeveldbCacheStorage``
+* install `LevelDB python bindings`_ like ``pip install leveldb``
+* install `BSDiff4`_ like ``pip install bsdiff4``
+
+.. _LevelDB: http://code.google.com/p/leveldb/
+.. _leveldb python bindings: https://pypi.python.org/pypi/leveldb
+.. _BSDiff4: https://github.com/ilanschnell/bsdiff4
+.. _bsdiff4 python bindings: https://pypi.python.org/pypi/bsdiff4/1.1.4
 
 HTTPCache middleware settings
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
