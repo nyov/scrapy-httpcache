@@ -11,7 +11,7 @@ from weakref import WeakKeyDictionary
 from collections import OrderedDict
 from email.utils import mktime_tz, parsedate_tz
 from w3lib.http import headers_raw_to_dict, headers_dict_to_raw
-from scrapy.http import Headers, Response, TextResponse
+from scrapy.http import Headers, Response
 from scrapy.responsetypes import responsetypes
 from scrapy.utils.request import request_fingerprint
 from scrapy.utils.project import data_path
@@ -566,35 +566,38 @@ class DeltaLeveldbCacheStorage(object):
         return pickle.loads(serial_response)
 
     def _recompress(self, response):
-        content_encoding = response.headers.getlist('Content-Encoding')
-        if content_encoding and not is_gzipped(response):
-            encoding = content_encoding[-1]
-            if encoding.lower() == b'gzip' or encoding.lower() == b'x-gzip':
+        encoding = self._is_compressed(response)
+        if encoding is not None:
+            if encoding == b'gzip' or encoding == b'x-gzip':
                 buffer = BytesIO()
                 with gzip.GzipFile(mode='wb', fileobj=buffer) as f:
                     f.write(response.body)
                     f.close()
                 encoded_body = buffer.getvalue()
-            if encoding.lower() == b'deflate':
+            if encoding == b'deflate':
                 encoded_body = zlib.compress(response.body)
-            kwargs = dict(body=encoded_body)
-            response = response.replace(**kwargs)
+            response = response.replace(**{'body': encoded_body})
         return response
 
     def _decompress(self, response):
-        content_encoding = response.headers.getlist('Content-Encoding')
-        if content_encoding and not is_gzipped(response):
-            encoding = content_encoding[-1]
-            if encoding.lower() == b'gzip' or encoding.lower() == b'x-gzip':
+        encoding = self._is_compressed(response)
+        if encoding is not None:
+            if encoding == b'gzip' or encoding == b'x-gzip':
                 decoded_body = gunzip(response.body)
-            if encoding.lower() == b'deflate':
+            if encoding == b'deflate':
                 try:
                     decoded_body = zlib.decompress(response.body)
                 except zlib.error:
                     decoded_body = zlib.decompress(response.body, -15)
-            kwargs = dict(body=decoded_body)
-            response = response.replace(**kwargs)
+            response = response.replace(**{'body': decoded_body})
         return response
+
+    def _is_compressed(self, response):
+        content_encoding = response.headers.getlist('Content-Encoding')
+        if content_encoding and not is_gzipped(response):
+            return content_encoding[-1].lower()
+        else:
+            return None
 
     # We can use this when we already have a key ahead of time,
     # i.e. grabbing sources by IP/domain, grabbing a source response.
