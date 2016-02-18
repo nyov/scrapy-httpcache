@@ -566,8 +566,9 @@ class DeltaLeveldbCacheStorage(object):
         return pickle.loads(serial_response)
 
     def _recompress(self, response):
-        encoding = self._is_compressed(response)
-        if encoding is not None:
+        content_encoding = response.headers.getlist('Content-Encoding')
+        if content_encoding and not is_gzipped(response):
+            encoding = content_encoding[-1].lower()
             if encoding == b'gzip' or encoding == b'x-gzip':
                 buffer = BytesIO()
                 with gzip.GzipFile(mode='wb', fileobj=buffer) as f:
@@ -580,8 +581,9 @@ class DeltaLeveldbCacheStorage(object):
         return response
 
     def _decompress(self, response):
-        encoding = self._is_compressed(response)
-        if encoding is not None:
+        content_encoding = response.headers.getlist('Content-Encoding')
+        if content_encoding and not is_gzipped(response):
+            encoding = content_encoding[-1].lower()
             if encoding == b'gzip' or encoding == b'x-gzip':
                 decoded_body = gunzip(response.body)
             if encoding == b'deflate':
@@ -591,13 +593,6 @@ class DeltaLeveldbCacheStorage(object):
                     decoded_body = zlib.decompress(response.body, -15)
             response = response.replace(**{'body': decoded_body})
         return response
-
-    def _is_compressed(self, response):
-        content_encoding = response.headers.getlist('Content-Encoding')
-        if content_encoding and not is_gzipped(response):
-            return content_encoding[-1].lower()
-        else:
-            return None
 
     # We can use this when we already have a key ahead of time,
     # i.e. grabbing sources by IP/domain, grabbing a source response.
