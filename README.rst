@@ -1,0 +1,85 @@
+================
+scrapy-httpcache
+================
+
+This plugin provides the Scrapy HttpCache downloader-middleware.
+
+
+Requirements
+============
+
+scrapy_ 1.0.0 or newer.
+
+.. _scrapy: https://pypi.python.org/pypi/scrapy
+
+
+Installation
+============
+
+Install scrapy-httpcache using ``pip``::
+
+    $ pip install scrapy-httpcache
+
+
+Configuration
+=============
+
+1. Add HttpCache middleware by including it in ``DOWNLOADER_MIDDLEWARES``
+   in your ``settings.py`` file::
+
+      DOWNLOADER_MIDDLEWARES = {
+          'scrapy_httpcache.HttpCacheMiddleware': 900,
+      }
+
+   It should usually be the last downloader middleware in the priority list,
+   where priority ``900`` is the standard and does not usually need changing.
+
+2. Configure the middleware using the ``HTTPCACHE_*`` settings.
+
+3. Enable the middleware using ``HTTPCACHE_ENABLED`` in your ``setting.py``::
+
+      HTTPCACHE_ENABLED = True
+
+4. Example config::
+
+      # Enable and configure HTTP caching
+      # See https://doc.scrapy.org/en/1.5/topics/downloader-middleware.html#httpcache-middleware-settings
+      #HTTPCACHE_ENABLED = True
+      #HTTPCACHE_EXPIRATION_SECS = 0
+      #HTTPCACHE_DIR = 'httpcache'
+      #HTTPCACHE_IGNORE_HTTP_CODES = []
+      #HTTPCACHE_STORAGE = 'scrapy_httpcache.httpcache.FilesystemCacheStorage'
+
+
+Usage
+=====
+
+The HttpCache middleware has various settings which control basic behavior,
+as well as backend-specific configuration (e.g. database login settings).
+The full list can be found in the documentation or from the source code.
+
+Base plugin settings
+--------------------
+
+* ``HTTPCACHE_ENABLED`` — to enable (or disable) this extension
+* ``HTTPCACHE_STORAGE`` — storage backend to use with httpcache
+* ``HTTPCACHE_POLICY``  — ruleset according to which files are cached and for how long
+
+These usually go in your Scrapy project's ``settings.py``.
+
+
+Supported Scrapy request meta keys
+----------------------------------
+
+* ``dont_cache`` — forcibly disable caching for this request's response,
+  independent of the HTTPCACHE_POLICY in action.
+
+
+Documentation
+=============
+
+Documentation can currently be found at 
+https://doc.scrapy.org/en/1.5/topics/downloader-middleware.html#httpcache-middleware-settings
+but shall be ported later.
+
+

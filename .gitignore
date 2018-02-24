@@ -8,3 +8,4 @@ build
 dist
 docs/_build
 _trial_temp
+.coverage
