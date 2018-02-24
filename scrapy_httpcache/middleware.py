@@ -1,8 +1,5 @@
 from email.utils import formatdate
-from twisted.internet import defer
-from twisted.internet.error import TimeoutError, DNSLookupError, \
-        ConnectionRefusedError, ConnectionDone, ConnectError, \
-        ConnectionLost, TCPTimedOutError
+from twisted.internet import defer, error
 from twisted.web.client import ResponseFailed
 from scrapy import signals
 from scrapy.exceptions import NotConfigured, IgnoreRequest
@@ -11,10 +8,18 @@ from scrapy.utils.misc import load_object
 
 class HttpCacheMiddleware(object):
 
-    DOWNLOAD_EXCEPTIONS = (defer.TimeoutError, TimeoutError, DNSLookupError,
-                           ConnectionRefusedError, ConnectionDone, ConnectError,
-                           ConnectionLost, TCPTimedOutError, ResponseFailed,
-                           IOError)
+    DOWNLOAD_EXCEPTIONS = (
+        defer.TimeoutError,
+        error.TimeoutError,
+        error.DNSLookupError,
+        error.ConnectionRefusedError,
+        error.ConnectionDone,
+        error.ConnectError,
+        error.ConnectionLost,
+        error.TCPTimedOutError,
+        ResponseFailed,
+        IOError,
+    )
 
     def __init__(self, settings, stats):
         if not settings.getbool('HTTPCACHE_ENABLED'):

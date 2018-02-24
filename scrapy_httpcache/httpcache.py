@@ -1,4 +1,3 @@
-from __future__ import print_function
 import os
 import gzip
 import logging
@@ -17,6 +16,35 @@ from scrapy.utils.python import to_bytes, to_unicode, garbage_collect
 
 
 logger = logging.getLogger(__name__)
+
+
+def parse_cachecontrol(header):
+    """Parse Cache-Control header
+
+    https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.9
+
+    >>> parse_cachecontrol(b'public, max-age=3600') == {b'public': None,
+    ...                                                 b'max-age': b'3600'}
+    True
+    >>> parse_cachecontrol(b'') == {}
+    True
+
+    """
+    directives = {}
+    for directive in header.split(b','):
+        key, sep, val = directive.strip().partition(b'=')
+        if key:
+            directives[key.lower()] = val if sep else None
+    return directives
+
+
+def rfc1123_to_epoch(date_str):
+    try:
+        date_str = to_unicode(date_str, encoding='ascii')
+        return mktime_tz(parsedate_tz(date_str))
+    except Exception:
+        return None
+
 
 
 class DummyPolicy(object):
@@ -408,32 +436,3 @@ class LeveldbCacheStorage(object):
 
     def _request_key(self, request):
         return to_bytes(request_fingerprint(request))
-
-
-
-def parse_cachecontrol(header):
-    """Parse Cache-Control header
-
-    https://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.9
-
-    >>> parse_cachecontrol(b'public, max-age=3600') == {b'public': None,
-    ...                                                 b'max-age': b'3600'}
-    True
-    >>> parse_cachecontrol(b'') == {}
-    True
-
-    """
-    directives = {}
-    for directive in header.split(b','):
-        key, sep, val = directive.strip().partition(b'=')
-        if key:
-            directives[key.lower()] = val if sep else None
-    return directives
-
-
-def rfc1123_to_epoch(date_str):
-    try:
-        date_str = to_unicode(date_str, encoding='ascii')
-        return mktime_tz(parsedate_tz(date_str))
-    except Exception:
-        return None
