@@ -44,11 +44,12 @@ Configuration
 
       # Enable and configure HTTP caching
       # See https://doc.scrapy.org/en/1.5/topics/downloader-middleware.html#httpcache-middleware-settings
-      #HTTPCACHE_ENABLED = True
-      #HTTPCACHE_EXPIRATION_SECS = 0
-      #HTTPCACHE_DIR = 'httpcache'
-      #HTTPCACHE_IGNORE_HTTP_CODES = []
-      #HTTPCACHE_STORAGE = 'scrapy_httpcache.httpcache.FilesystemCacheStorage'
+      HTTPCACHE_ENABLED = True
+      HTTPCACHE_EXPIRATION_SECS = 0
+      HTTPCACHE_DIR = 'httpcache'
+      HTTPCACHE_IGNORE_HTTP_CODES = []
+      HTTPCACHE_POLICY = 'scrapy_httpcache.policy.DummyPolicy'
+      HTTPCACHE_STORAGE = 'scrapy_httpcache.storage.FilesystemCacheStorage'
 
 
 Usage
@@ -79,7 +80,7 @@ Documentation
 =============
 
 Documentation can currently be found at 
-https://doc.scrapy.org/en/1.5/topics/downloader-middleware.html#httpcache-middleware-settings
+https://doc.scrapy.org/en/1.5/topics/downloader-middleware.html#module-scrapy.downloadermiddlewares.httpcache
 but shall be ported later.
 
 

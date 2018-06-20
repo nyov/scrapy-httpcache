@@ -31,5 +31,6 @@ setup(
     ],
     install_requires=[
         'Scrapy>=1.0.0',
+        'six',
     ],
 )

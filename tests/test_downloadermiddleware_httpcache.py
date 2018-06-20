@@ -12,13 +12,13 @@ from scrapy.spiders import Spider
 from scrapy.settings import Settings
 from scrapy.exceptions import IgnoreRequest
 from scrapy.utils.test import get_crawler
-from scrapy_httpcache.middleware import HttpCacheMiddleware
+from scrapy_httpcache import HttpCacheMiddleware
 
 
 class _BaseTest(unittest.TestCase):
 
-    storage_class = 'scrapy_httpcache.httpcache.DbmCacheStorage'
-    policy_class = 'scrapy_httpcache.httpcache.RFC2616Policy'
+    storage_class = 'scrapy_httpcache.storage.DbmCacheStorage'
+    policy_class = 'scrapy_httpcache.policy.RFC2616Policy'
 
     def setUp(self):
         self.yesterday = email.utils.formatdate(time.time() - 86400)
@@ -127,7 +127,7 @@ class DefaultStorageTest(_BaseTest):
 
 class DbmStorageTest(DefaultStorageTest):
 
-    storage_class = 'scrapy_httpcache.httpcache.DbmCacheStorage'
+    storage_class = 'scrapy_httpcache.storage.DbmCacheStorage'
 
 
 class DbmStorageWithCustomDbmModuleTest(DbmStorageTest):
@@ -146,7 +146,7 @@ class DbmStorageWithCustomDbmModuleTest(DbmStorageTest):
 
 class FilesystemStorageTest(DefaultStorageTest):
 
-    storage_class = 'scrapy_httpcache.httpcache.FilesystemCacheStorage'
+    storage_class = 'scrapy_httpcache.storage.FilesystemCacheStorage'
 
 class FilesystemStorageGzipTest(FilesystemStorageTest):
 
@@ -157,12 +157,12 @@ class FilesystemStorageGzipTest(FilesystemStorageTest):
 class LeveldbStorageTest(DefaultStorageTest):
 
     pytest.importorskip('leveldb')
-    storage_class = 'scrapy_httpcache.httpcache.LeveldbCacheStorage'
+    storage_class = 'scrapy_httpcache.storage.LeveldbCacheStorage'
 
 
 class DummyPolicyTest(_BaseTest):
 
-    policy_class = 'scrapy_httpcache.httpcache.DummyPolicy'
+    policy_class = 'scrapy_httpcache.policy.DummyPolicy'
 
     def test_middleware(self):
         with self._middleware() as mw:
@@ -254,7 +254,7 @@ class DummyPolicyTest(_BaseTest):
 
 class RFC2616PolicyTest(DefaultStorageTest):
 
-    policy_class = 'scrapy_httpcache.httpcache.RFC2616Policy'
+    policy_class = 'scrapy_httpcache.policy.RFC2616Policy'
 
     def _process_requestresponse(self, mw, request, response):
         result = None
