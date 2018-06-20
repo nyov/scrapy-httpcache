@@ -1,12 +1,18 @@
-================
-scrapy-httpcache
-================
+========================================
+scrapy-httpcache |version| documentation
+========================================
 
 scrapy-httpcache is a Scrapy `Downloader Middleware <https://doc.scrapy.org/en/latest/topics/downloader-middleware.html#downloader-middleware>`_
 to cache HTTP Requests and Responses locally.
 
 This plugin provides the Scrapy HttpCache downloader-middleware, which
 works as a drop-in replacement to the HttpCache shipped with Scrapy.
+
+.. toctree::
+   :maxdepth: 2
+
+   index
+   httpcache-middleware
 
 
 Requirements
@@ -61,7 +67,6 @@ Configuration
       HTTPCACHE_EXPIRATION_SECS = 0
       HTTPCACHE_DIR = 'httpcache'
       HTTPCACHE_IGNORE_HTTP_CODES = []
-      HTTPCACHE_POLICY = 'scrapy_httpcache.policy.DummyPolicy'
       HTTPCACHE_STORAGE = 'scrapy_httpcache.storage.FilesystemCacheStorage'
 
   A config with default settings can be imported from
@@ -95,6 +100,13 @@ Supported Scrapy request meta keys
 Documentation
 =============
 
-Documentation can be found in the docs/ directory.
+You're looking at it.
 
+
+Indices and tables
+==================
+
+* :ref:`genindex`
+* :ref:`modindex`
+* :ref:`search`
 
