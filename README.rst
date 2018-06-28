@@ -6,7 +6,10 @@ scrapy-httpcache is a Scrapy `Downloader Middleware <https://doc.scrapy.org/en/l
 to cache HTTP Requests and Responses locally.
 
 This plugin provides the Scrapy HttpCache downloader-middleware, which
-works as a drop-in replacement to the HttpCache shipped with Scrapy.
+provides low-level cache to all HTTP requests and responses.
+To do this, the system combines the idea of a `cache storage` (where things are
+cached) with a `cache policy` (what things are cached).
+This spin-off works as a drop-in replacement to the HttpCache shipped with Scrapy.
 
 
 Requirements

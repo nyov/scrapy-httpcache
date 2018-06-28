@@ -48,7 +48,7 @@ when an Internet connection is not available. The goal is to be able to
 
 In order to use this policy, set:
 
-* :setting:`HTTPCACHE_POLICY` to ``scrapy.extensions.httpcache.DummyPolicy``
+* :setting:`HTTPCACHE_POLICY` to ``scrapy_httpcache.policy.DummyPolicy``
 
 
 .. _httpcache-policy-rfc2616:
@@ -94,7 +94,7 @@ what is missing:
 
 In order to use this policy, set:
 
-* :setting:`HTTPCACHE_POLICY` to ``scrapy.extensions.httpcache.RFC2616Policy``
+* :setting:`HTTPCACHE_POLICY` to ``scrapy_httpcache.policy.RFC2616Policy``
 
 
 .. _httpcache-storage-fs:
@@ -106,7 +106,7 @@ File system storage backend is available for the HTTP cache middleware.
 
 In order to use this storage backend, set:
 
-* :setting:`HTTPCACHE_STORAGE` to ``scrapy.extensions.httpcache.FilesystemCacheStorage``
+* :setting:`HTTPCACHE_STORAGE` to ``scrapy_httpcache.storage.FilesystemCacheStorage``
 
 Each request/response pair is stored in a different directory containing
 the following files:
@@ -132,8 +132,6 @@ inefficient in many file systems). An example directory could be::
 DBM storage backend
 ~~~~~~~~~~~~~~~~~~~
 
-.. versionadded:: 0.13
-
 A DBM_ storage backend is also available for the HTTP cache middleware.
 
 By default, it uses the anydbm_ module, but you can change it with the
@@ -141,14 +139,12 @@ By default, it uses the anydbm_ module, but you can change it with the
 
 In order to use this storage backend, set:
 
-* :setting:`HTTPCACHE_STORAGE` to ``scrapy.extensions.httpcache.DbmCacheStorage``
+* :setting:`HTTPCACHE_STORAGE` to ``scrapy_httpcache.storage.DbmCacheStorage``
 
 .. _httpcache-storage-leveldb:
 
 LevelDB storage backend
 ~~~~~~~~~~~~~~~~~~~~~~~
-
-.. versionadded:: 0.23
 
 A LevelDB_ storage backend is also available for the HTTP cache middleware.
 
@@ -158,7 +154,7 @@ the scrapy shell in parallel for the same spider.
 
 In order to use this storage backend:
 
-* set :setting:`HTTPCACHE_STORAGE` to ``scrapy.extensions.httpcache.LeveldbCacheStorage``
+* set :setting:`HTTPCACHE_STORAGE` to ``scrapy_httpcache.storage.LeveldbCacheStorage``
 * install `LevelDB python bindings`_ like ``pip install leveldb``
 
 .. _LevelDB: https://github.com/google/leveldb
@@ -176,14 +172,9 @@ settings:
 HTTPCACHE_ENABLED
 ^^^^^^^^^^^^^^^^^
 
-.. versionadded:: 0.11
-
 Default: ``False``
 
 Whether the HTTP cache will be enabled.
-
-.. versionchanged:: 0.11
-   Before 0.11, :setting:`HTTPCACHE_DIR` was used to enable cache.
 
 .. setting:: HTTPCACHE_EXPIRATION_SECS
 
@@ -196,9 +187,6 @@ Expiration time for cached requests, in seconds.
 
 Cached requests older than this time will be re-downloaded. If zero, cached
 requests will never expire.
-
-.. versionchanged:: 0.11
-   Before 0.11, zero meant cached requests always expire.
 
 .. setting:: HTTPCACHE_DIR
 
@@ -215,8 +203,6 @@ project data dir. For more info see: :ref:`topics-project-structure`.
 
 HTTPCACHE_IGNORE_HTTP_CODES
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-.. versionadded:: 0.10
 
 Default: ``[]``
 
@@ -236,8 +222,6 @@ If enabled, requests not found in the cache will be ignored instead of downloade
 HTTPCACHE_IGNORE_SCHEMES
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. versionadded:: 0.10
-
 Default: ``['file']``
 
 Don't cache responses with these URI schemes.
@@ -247,7 +231,7 @@ Don't cache responses with these URI schemes.
 HTTPCACHE_STORAGE
 ^^^^^^^^^^^^^^^^^
 
-Default: ``'scrapy.extensions.httpcache.FilesystemCacheStorage'``
+Default: ``'scrapy_httpcache.storage.FilesystemCacheStorage'``
 
 The class which implements the cache storage backend.
 
@@ -255,8 +239,6 @@ The class which implements the cache storage backend.
 
 HTTPCACHE_DBM_MODULE
 ^^^^^^^^^^^^^^^^^^^^
-
-.. versionadded:: 0.13
 
 Default: ``'anydbm'``
 
@@ -268,9 +250,7 @@ The database module to use in the :ref:`DBM storage backend
 HTTPCACHE_POLICY
 ^^^^^^^^^^^^^^^^
 
-.. versionadded:: 0.18
-
-Default: ``'scrapy.extensions.httpcache.DummyPolicy'``
+Default: ``'scrapy_httpcache.policy.DummyPolicy'``
 
 The class which implements the cache policy.
 
@@ -278,8 +258,6 @@ The class which implements the cache policy.
 
 HTTPCACHE_GZIP
 ^^^^^^^^^^^^^^
-
-.. versionadded:: 1.0
 
 Default: ``False``
 
@@ -290,8 +268,6 @@ This setting is specific to the Filesystem backend.
 
 HTTPCACHE_ALWAYS_STORE
 ^^^^^^^^^^^^^^^^^^^^^^
-
-.. versionadded:: 1.1
 
 Default: ``False``
 
@@ -310,8 +286,6 @@ responses you feedto the cache middleware.
 
 HTTPCACHE_IGNORE_RESPONSE_CACHE_CONTROLS
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-.. versionadded:: 1.1
 
 Default: ``[]``
 
