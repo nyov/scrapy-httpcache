@@ -1,5 +1,6 @@
-from .middleware import HttpCacheMiddleware
-
+"""
+scrapy-httpcache - a Scrapy Downloader Middleware
+"""
 
 # Package version
 import pkgutil
@@ -7,3 +8,5 @@ __version__ = pkgutil.get_data(__package__, 'VERSION').decode('ascii').strip()
 version_info = tuple(int(v) if v.isdigit() else v
                      for v in __version__.split('.'))
 del pkgutil
+
+from .middleware import HttpCacheMiddleware
