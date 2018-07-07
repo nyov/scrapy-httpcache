@@ -34,11 +34,35 @@ def rfc1123_to_epoch(date_str):
         return None
 
 
-class DummyPolicy(object):
+class CachePolicy(object):
 
     def __init__(self, settings):
         self.ignore_schemes = settings.getlist('HTTPCACHE_IGNORE_SCHEMES')
         self.ignore_http_codes = [int(x) for x in settings.getlist('HTTPCACHE_IGNORE_HTTP_CODES')]
+        # currently only used by RFC2616Policy (but defined here fore reuseability):
+        self.always_store = settings.getbool('HTTPCACHE_ALWAYS_STORE')
+        self.ignore_response_cache_controls = [to_bytes(cc) for cc in
+            settings.getlist('HTTPCACHE_IGNORE_RESPONSE_CACHE_CONTROLS')]
+
+    def should_cache_request(self, request):
+        raise NotImplementedError
+
+    def should_cache_response(self, response, request):
+        raise NotImplementedError
+
+    def is_cached_response_fresh(self, cachedresponse, request):
+        raise NotImplementedError
+
+    def is_cached_response_valid(self, cachedresponse, response, request):
+        raise NotImplementedError
+
+
+class DummyPolicy(CachePolicy):
+
+    def __init__(self, settings):
+        super(DummyPolicy, self).__init__(settings)
+        self.always_store = True # implicit behaviour of this policy
+        self.ignore_response_cache_controls = []
 
     def should_cache_request(self, request):
         return urlparse_cached(request).scheme not in self.ignore_schemes
@@ -46,22 +70,19 @@ class DummyPolicy(object):
     def should_cache_response(self, response, request):
         return response.status not in self.ignore_http_codes
 
-    def is_cached_response_fresh(self, response, request):
+    def is_cached_response_fresh(self, cachedresponse, request):
         return True
 
     def is_cached_response_valid(self, cachedresponse, response, request):
         return True
 
 
-class RFC2616Policy(object):
+class RFC2616Policy(CachePolicy):
 
     MAXAGE = 3600 * 24 * 365  # one year
 
     def __init__(self, settings):
-        self.always_store = settings.getbool('HTTPCACHE_ALWAYS_STORE')
-        self.ignore_schemes = settings.getlist('HTTPCACHE_IGNORE_SCHEMES')
-        self.ignore_response_cache_controls = [to_bytes(cc) for cc in
-            settings.getlist('HTTPCACHE_IGNORE_RESPONSE_CACHE_CONTROLS')]
+        super(RFC2616Policy, self).__init__(settings)
         self._cc_parsed = WeakKeyDictionary()
 
     def _parse_cachecontrol(self, r):
@@ -85,6 +106,11 @@ class RFC2616Policy(object):
         return True
 
     def should_cache_response(self, response, request):
+        # Respect any locally ignored HTTP codes (like DummyPolicy)
+        # TODO: add testcase and enable this
+        #if response.status in self.ignore_http_codes:
+        #    return False
+
         # What is cacheable - https://www.w3.org/Protocols/rfc2616/rfc2616-sec13.html#sec14.9.1
         # Response cacheability - https://www.w3.org/Protocols/rfc2616/rfc2616-sec13.html#sec13.4
         # Status code 206 is not included because cache can not deal with partial contents

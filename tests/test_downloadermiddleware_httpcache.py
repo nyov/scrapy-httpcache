@@ -173,6 +173,14 @@ class DummyPolicyTest(_BaseTest):
             self.assertEqualResponse(self.response, response)
             assert 'cached' in response.flags
 
+    def test_response_cacheability(self):
+        # cache ignores HTTPCACHE_ALWAYS_STORE
+        with self._middleware(HTTPCACHE_ALWAYS_STORE=False) as mw:
+            assert mw.policy.always_store == True
+        # cache ignores HTTPCACHE_IGNORE_RESPONSE_CACHE_CONTROLS
+        with self._middleware(HTTPCACHE_IGNORE_RESPONSE_CACHE_CONTROLS=['no-cache', 'no-store']) as mw:
+            assert mw.policy.ignore_response_cache_controls == []
+
     def test_different_request_response_urls(self):
         with self._middleware() as mw:
             req = Request('http://host.com/path')
@@ -506,6 +514,7 @@ class RFC2616PolicyTest(DefaultStorageTest):
                 res2 = self._process_requestresponse(mw, req0, None)
                 self.assertEqualResponse(res1, res2)
                 assert 'cached' in res2.flags
+
 
 if __name__ == '__main__':
     unittest.main()
