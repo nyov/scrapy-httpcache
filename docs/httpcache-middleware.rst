@@ -156,9 +156,11 @@ In order to use this storage backend:
 
 * set :setting:`HTTPCACHE_STORAGE` to ``scrapy_httpcache.storage.LeveldbCacheStorage``
 * install `LevelDB python bindings`_ like ``pip install leveldb``
+* or use the `Plyvel bindings`_ like ``pip install plyvel``
 
 .. _LevelDB: https://github.com/google/leveldb
 .. _leveldb python bindings: https://pypi.python.org/pypi/leveldb
+.. _plyvel bindings: https://plyvel.readthedocs.io/
 
 
 HTTPCache middleware settings
