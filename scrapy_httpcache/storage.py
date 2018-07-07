@@ -17,20 +17,36 @@ from scrapy.utils.python import garbage_collect, to_bytes
 logger = logging.getLogger(__name__)
 
 
-class FilesystemCacheStorage(object):
+class CacheStorage(object):
 
     def __init__(self, settings):
-        self.cachedir = data_path(settings['HTTPCACHE_DIR'])
+        self.cachedir = data_path(settings['HTTPCACHE_DIR'], createdir=True)
         self.expiration_secs = settings.getint('HTTPCACHE_EXPIRATION_SECS')
-        self.use_gzip = settings.getbool('HTTPCACHE_GZIP')
-        self._open = gzip.open if self.use_gzip else open
 
     def open_spider(self, spider):
-        logger.debug("Using filesystem cache storage in %(cachedir)s" % {'cachedir': self.cachedir},
-                     extra={'spider': spider})
+        logger.debug("Opened %(storage)s on %(cachepath)s" %
+            {'storage': self.__class__.__name__, 'cachepath': self.cachedir}, extra={'spider': spider})
 
     def close_spider(self, spider):
-        pass
+        logger.debug("Closed %(storage)s on %(cachepath)s" %
+            {'storage': self.__class__.__name__, 'cachepath': self.cachedir}, extra={'spider': spider})
+
+    def retrieve_response(self, spider, request):
+        raise NotImplementedError
+
+    def store_response(self, spider, request, response):
+        raise NotImplementedError
+
+    def _request_key(self, request):
+        return request_fingerprint(request)
+
+
+class FilesystemCacheStorage(CacheStorage):
+
+    def __init__(self, settings):
+        super(FilesystemCacheStorage, self).__init__(settings)
+        self.use_gzip = settings.getbool('HTTPCACHE_GZIP')
+        self._open = gzip.open if self.use_gzip else open
 
     def retrieve_response(self, spider, request):
         """Return response if present in cache, or None otherwise."""
@@ -75,7 +91,7 @@ class FilesystemCacheStorage(object):
             f.write(request.body)
 
     def _get_request_path(self, spider, request):
-        key = request_fingerprint(request)
+        key = self._request_key(request)
         return os.path.join(self.cachedir, spider.name, key[0:2], key)
 
     def _read_meta(self, spider, request):
@@ -90,22 +106,21 @@ class FilesystemCacheStorage(object):
             return pickle.load(f)
 
 
-class DbmCacheStorage(object):
+class DbmCacheStorage(CacheStorage):
 
     def __init__(self, settings):
-        self.cachedir = data_path(settings['HTTPCACHE_DIR'], createdir=True)
-        self.expiration_secs = settings.getint('HTTPCACHE_EXPIRATION_SECS')
+        super(DbmCacheStorage, self).__init__(settings)
         self.dbmodule = import_module(settings['HTTPCACHE_DBM_MODULE'])
         self.db = None
 
     def open_spider(self, spider):
+        super(DbmCacheStorage, self).open_spider(spider)
         dbpath = os.path.join(self.cachedir, '%s.db' % spider.name)
         self.db = self.dbmodule.open(dbpath, 'c')
 
-        logger.debug("Using DBM cache storage in %(cachepath)s" % {'cachepath': dbpath}, extra={'spider': spider})
-
     def close_spider(self, spider):
         self.db.close()
+        super(DbmCacheStorage, self).close_spider(spider)
 
     def retrieve_response(self, spider, request):
         data = self._read_data(spider, request)
@@ -143,24 +158,19 @@ class DbmCacheStorage(object):
 
         return pickle.loads(db['%s_data' % key])
 
-    def _request_key(self, request):
-        return request_fingerprint(request)
 
-
-class LeveldbCacheStorage(object):
+class LeveldbCacheStorage(CacheStorage):
 
     def __init__(self, settings):
         import leveldb
         self._leveldb = leveldb
-        self.cachedir = data_path(settings['HTTPCACHE_DIR'], createdir=True)
-        self.expiration_secs = settings.getint('HTTPCACHE_EXPIRATION_SECS')
+        super(LeveldbCacheStorage, self).__init__(settings)
         self.db = None
 
     def open_spider(self, spider):
+        super(LeveldbCacheStorage, self).open_spider(spider)
         dbpath = os.path.join(self.cachedir, '%s.leveldb' % spider.name)
         self.db = self._leveldb.LevelDB(dbpath)
-
-        logger.debug("Using LevelDB cache storage in %(cachepath)s" % {'cachepath': dbpath}, extra={'spider': spider})
 
     def close_spider(self, spider):
         # Do compactation each time to save space and also recreate files to
@@ -168,6 +178,7 @@ class LeveldbCacheStorage(object):
         self.db.CompactRange()
         del self.db
         garbage_collect()
+        super(LeveldbCacheStorage, self).close_spider(spider)
 
     def retrieve_response(self, spider, request):
         data = self._read_data(spider, request)
@@ -182,7 +193,7 @@ class LeveldbCacheStorage(object):
         return response
 
     def store_response(self, spider, request, response):
-        key = self._request_key(request)
+        key = to_bytes(self._request_key(request))
         data = {
             'status': response.status,
             'url': response.url,
@@ -195,7 +206,7 @@ class LeveldbCacheStorage(object):
         self.db.Write(batch)
 
     def _read_data(self, spider, request):
-        key = self._request_key(request)
+        key = to_bytes(self._request_key(request))
         try:
             ts = self.db.Get(key + b'_time')
         except KeyError:
@@ -210,6 +221,3 @@ class LeveldbCacheStorage(object):
             return  # invalid entry
         else:
             return pickle.loads(data)
-
-    def _request_key(self, request):
-        return to_bytes(request_fingerprint(request))
