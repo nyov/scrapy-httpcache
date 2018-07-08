@@ -173,8 +173,8 @@ class MongodbCacheStorage(CacheStorage):
             gf = self.fs[spider].get(key)
         except errors.NoFile:
             return # not found
-        if 0 < self.expiration_secs < time() - gf.time:
-            return # expired
+        if self._is_expired(gf.time):
+            return
         return gf
 
     def _request_key(self, spider, request):

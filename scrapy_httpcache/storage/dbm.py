@@ -57,7 +57,7 @@ class DbmCacheStorage(CacheStorage):
             return  # not found
 
         ts = db[tkey]
-        if 0 < self.expiration_secs < time() - float(ts):
-            return  # expired
+        if self._is_expired(ts):
+            return
 
         return pickle.loads(db['%s_data' % key])

@@ -68,8 +68,8 @@ class FilesystemCacheStorage(CacheStorage):
         metapath = os.path.join(rpath, 'pickled_meta')
         if not os.path.exists(metapath):
             return  # not found
-        mtime = os.stat(metapath).st_mtime
-        if 0 < self.expiration_secs < time() - mtime:
-            return  # expired
+        ts = os.stat(metapath).st_mtime
+        if self._is_expired(ts):
+            return
         with self._open(metapath, 'rb') as f:
             return pickle.load(f)
