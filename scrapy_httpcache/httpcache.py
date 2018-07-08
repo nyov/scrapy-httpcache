@@ -7,9 +7,10 @@
 # Migrating to the form of `scrapy_httpcache.policy.*` and
 # `scrapy_httpcache.storage.*` is preferred however.
 
-from .policy import DummyPolicy
-from .policy import RFC2616Policy
+from .policy.dummy import DummyPolicy
+from .policy.rfc2616 import RFC2616Policy
 
-from .storage import FilesystemCacheStorage
-from .storage import DbmCacheStorage
-from .storage import LeveldbCacheStorage
+from .storage.filesystem import FilesystemCacheStorage
+from .storage.dbm import DbmCacheStorage
+from .storage.leveldb import LeveldbCacheStorage
+from .storage.mongodb import MongodbCacheStorage

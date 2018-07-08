@@ -1,21 +1,16 @@
-"""
-Mongo Cache Storage
+""" MongoDB Cache Storage
 
-A MongoDB backend for HTTP cache storage. It stores responses using GridFS.
-
-To use it, set the following Scrapy setting in your project:
-
-    HTTPCACHE_STORAGE = 'scmongo.httpcache.MongoCacheStorage'
-
+A MongoDB Cache Storage backend which stores responses using GridFS.
 """
 import os
+import logging
 from time import time
 
-from scrapy import log
 from scrapy.responsetypes import responsetypes
 from scrapy.exceptions import NotConfigured
-from scrapy.utils.request import request_fingerprint
 from scrapy.http import Headers
+
+from .base import CacheStorage
 
 try:
     from pymongo import MongoClient, MongoReplicaSetClient
@@ -24,6 +19,10 @@ try:
     from gridfs import GridFS, errors
 except ImportError:
     MongoClient = None
+
+
+logger = logging.getLogger(__name__)
+
 
 def get_database(settings):
     """Return Mongo database based on the given settings, also pulling the
@@ -70,7 +69,7 @@ def get_database(settings):
     return conf
 
 
-class MongoCacheStorage(object):
+class MongodbCacheStorage(CacheStorage):
     """Storage backend for Scrapy HTTP cache, which stores responses in MongoDB
     GridFS.
 
@@ -86,7 +85,7 @@ class MongoCacheStorage(object):
             version = '.'.join('%s'% v for v in mongo_version)
             raise NotConfigured('%s requires pymongo version >= 2.4 but got %s' %
                     (self.__class__.__name__, version))
-        self.expire = settings.getint('HTTPCACHE_EXPIRATION_SECS')
+        super(MongodbCacheStorage, self).__init__(settings)
         self.sharded = settings.getbool('HTTPCACHE_SHARDED', False)
         kwargs = get_database(settings)
         kwargs.update(kw)
@@ -124,9 +123,8 @@ class MongoCacheStorage(object):
 
         if user is not None and password is not None:
             self.db.authenticate(user, password)
-        log.msg('%s connected to %s:%s, using database \'%s\'' %
-                (self.__class__.__name__, client.host, client.port, db),
-                level=log.DEBUG)
+        logger.debug("Backend %(storage)s connected to %(host)s:%(port)s, using database '%(db)s'" %
+            {'storage': self.__class__.__name__, 'host': client.host, 'port': client.port, 'db': db})
         self.fs = {}
 
     def open_spider(self, spider):
@@ -175,12 +173,12 @@ class MongoCacheStorage(object):
             gf = self.fs[spider].get(key)
         except errors.NoFile:
             return # not found
-        if 0 < self.expire < time() - gf.time:
+        if 0 < self.expiration_secs < time() - gf.time:
             return # expired
         return gf
 
     def _request_key(self, spider, request):
-        rfp = request_fingerprint(request)
+        rfp = self._request_key(request)
         # We could disable the namespacing in sharded mode (old behaviour),
         # but keeping it allows us to merge collections later without
         # worrying about key conflicts.
