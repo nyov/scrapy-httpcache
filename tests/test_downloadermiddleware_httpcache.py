@@ -125,10 +125,20 @@ class DefaultStorageTest(_BaseTest):
             assert storage.retrieve_response(self.spider, self.request)
 
 
+class FilesystemStorageTest(DefaultStorageTest):
+
+    storage_class = 'scrapy_httpcache.storage.FilesystemCacheStorage'
+
+class FilesystemStorageGzipTest(FilesystemStorageTest):
+
+    def _get_settings(self, **new_settings):
+        new_settings.setdefault('HTTPCACHE_GZIP', True)
+        return super(FilesystemStorageTest, self)._get_settings(**new_settings)
+
+
 class DbmStorageTest(DefaultStorageTest):
 
     storage_class = 'scrapy_httpcache.storage.DbmCacheStorage'
-
 
 class DbmStorageWithCustomDbmModuleTest(DbmStorageTest):
 
@@ -143,16 +153,6 @@ class DbmStorageWithCustomDbmModuleTest(DbmStorageTest):
         with self._storage() as storage:
             self.assertEqual(storage.dbmodule.__name__, self.dbm_module)
 
-
-class FilesystemStorageTest(DefaultStorageTest):
-
-    storage_class = 'scrapy_httpcache.storage.FilesystemCacheStorage'
-
-class FilesystemStorageGzipTest(FilesystemStorageTest):
-
-    def _get_settings(self, **new_settings):
-        new_settings.setdefault('HTTPCACHE_GZIP', True)
-        return super(FilesystemStorageTest, self)._get_settings(**new_settings)
 
 class LeveldbStorageTest(DefaultStorageTest):
 
@@ -185,6 +185,18 @@ class PlyvelLeveldbStorageTest(DefaultStorageTest):
         # make sure our db module has been loaded
         with self._storage() as storage:
             self.assertEqual(storage.dbmodule.__name__, self.db_module)
+
+
+# TODO:
+# https://github.com/mongomock/mongomock
+# https://github.com/mdomke/pytest-mongodb
+'''
+class MongodbStorageTest(DefaultStorageTest):
+
+    pytest.importorskip('pymongo')
+    pytest.importorskip('gridfs')
+    storage_class = 'scrapy_httpcache.storage.MongodbCacheStorage'
+'''
 
 
 class DummyPolicyTest(_BaseTest):

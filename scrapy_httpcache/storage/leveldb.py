@@ -88,8 +88,8 @@ class LeveldbCacheStorage(CacheStorage):
         except KeyError:
             return  # not found or invalid entry
 
-        if 0 < self.expiration_secs < time() - float(ts):
-            return  # expired
+        if self._is_expired(ts):
+            return
 
         try:
             if self.dbdriver == 'plyvel':
