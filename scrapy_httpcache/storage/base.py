@@ -8,6 +8,8 @@ logger = logging.getLogger(__name__)
 
 
 class CacheStorage(object):
+    """ Abstract Cache Storage backend.
+    """
 
     def __init__(self, settings):
         self.cachedir = data_path(settings['HTTPCACHE_DIR'], createdir=True)

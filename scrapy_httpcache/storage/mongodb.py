@@ -70,8 +70,7 @@ def get_database(settings):
 
 
 class MongodbCacheStorage(CacheStorage):
-    """Storage backend for Scrapy HTTP cache, which stores responses in MongoDB
-    GridFS.
+    """ Cache Storage backend for storing data in MongoDB GridFS.
 
     If HTTPCACHE_SHARDED is True, a different collection will be used for
     each spider, similar to FilesystemCacheStorage using folders per spider.

@@ -7,6 +7,9 @@ from .base import CachePolicy, parse_cachecontrol, rfc1123_to_epoch
 
 
 class RFC2616Policy(CachePolicy):
+    """ Cache Policy following RFC 2616, implementing browser-like
+    caching behavior.
+    """
 
     MAXAGE = 3600 * 24 * 365  # one year
 

@@ -4,6 +4,9 @@ from .base import CachePolicy
 
 
 class DummyPolicy(CachePolicy):
+    """ Dummy Cache Policy for caching everything except ignored schemes
+    and HTTP codes.
+    """
 
     def __init__(self, settings):
         super(DummyPolicy, self).__init__(settings)

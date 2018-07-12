@@ -11,6 +11,8 @@ from .base import CacheStorage
 
 
 class DbmCacheStorage(CacheStorage):
+    """ Cache Storage backend for storing data in Unix database (DBM) files.
+    """
 
     def __init__(self, settings):
         super(DbmCacheStorage, self).__init__(settings)

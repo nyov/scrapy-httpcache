@@ -11,6 +11,8 @@ from .base import CacheStorage
 
 
 class FilesystemCacheStorage(CacheStorage):
+    """ Cache Storage backend for storing data as plain files in a directory tree.
+    """
 
     def __init__(self, settings):
         super(FilesystemCacheStorage, self).__init__(settings)

@@ -31,6 +31,8 @@ def rfc1123_to_epoch(date_str):
 
 
 class CachePolicy(object):
+    """ Abstract Cache Policy.
+    """
 
     def __init__(self, settings):
         self.ignore_schemes = settings.getlist('HTTPCACHE_IGNORE_SCHEMES')

@@ -13,6 +13,8 @@ from .base import CacheStorage
 
 
 class LeveldbCacheStorage(CacheStorage):
+    """ Cache Storage backend for storing data in LevelDB.
+    """
 
     def __init__(self, settings):
         super(LeveldbCacheStorage, self).__init__(settings)
