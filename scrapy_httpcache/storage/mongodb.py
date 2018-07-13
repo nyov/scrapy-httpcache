@@ -5,6 +5,7 @@ A MongoDB Cache Storage backend which stores responses using GridFS.
 import logging
 from time import time
 import warnings
+import six
 
 from scrapy.responsetypes import responsetypes
 from scrapy.exceptions import NotConfigured
@@ -84,9 +85,14 @@ class MongodbCacheStorage(CacheStorage):
 
     If HTTPCACHE_SHARDED is True, a different collection will be used for
     each spider, similar to FilesystemCacheStorage using folders per spider.
+
+    WARNING: Is not yet Python3 compatible!
     """
 
     def __init__(self, settings, **kw):
+        if six.PY3:
+            raise NotConfigured('%s is not yet Python3 compatible!' %
+                                self.__class__.__name__)
         if MongoClient is None:
             raise NotConfigured('%s depends on the pymongo and gridfs modules.' %
                                 self.__class__.__name__)
@@ -96,34 +102,46 @@ class MongodbCacheStorage(CacheStorage):
                     (self.__class__.__name__, version))
         super(MongodbCacheStorage, self).__init__(settings)
         self.sharded = settings.getbool('HTTPCACHE_SHARDED', False)
-        kwargs = get_database(settings)
+        self.settings = get_database(settings)
         # options passed as "positional arguments" take precedence
-        kwargs.update(kw)
-        db = kwargs.pop('db')
-        user = kwargs.pop('user', None)
-        password = kwargs.pop('password', None)
-        if 'replicaSet' in kwargs:
-            client = MongoReplicaSetClient(**kwargs)
+        self.settings.update(kw)
+
+    def open_spider(self, spider):
+        db = self.settings.pop('db')
+        user = self.settings.pop('user', None)
+        password = self.settings.pop('password', None)
+        if 'replicaSet' in self.settings:
+            client = MongoReplicaSetClient(**self.settings)
         else:
-            client = MongoClient(**kwargs)
+            client = MongoClient(**self.settings)
 
         try:
             # try to use a database passed as a 'mongodb://' URI string
-            if hasattr(client, 'get_database'): # pymongo 3.5+ rename
-                self.db = client.get_database()
-            else:
+            # NOTE: `get_default_database` is deprecated, however
+            #       `get_database` only allows an empty 'name' value
+            #       (for using the database as passed in the URI string)
+            #       since pymongo3.5; so we keep preferring this one until it's gone.
+            if hasattr(client, 'get_default_database'):
                 self.db = client.get_default_database()
+            else:
+                self.db = client.get_database()
         except ConfigurationError:
             # fall back to passed 'HTTPCACHE_MONGO_*' options
             self.db = client[db]
 
         if user is not None and password is not None:
+            # another deprecated method FIXME
             self.db.authenticate(user, password)
-        logger.debug("Backend %(storage)s connected to %(host)s:%(port)s, using database '%(db)s'" %
-            {'storage': self.__class__.__name__, 'host': client.host, 'port': client.port, 'db': db})
-        self.fs = {}
 
-    def open_spider(self, spider):
+        self.client = client
+        try:
+            (host, port) = client.address
+        except InvalidOperation:
+            (host, port) = ('unknown', 'unknown')
+        logger.debug("Backend %(storage)s connected to %(host)s:%(port)s, using database '%(db)s'" %
+            {'storage': self.__class__.__name__, 'host': host, 'port': port, 'db': db})
+
+        self.fs = {}
         _shard = 'httpcache'
         if self.sharded:
             _shard = 'httpcache.%s' % spider.name
@@ -131,10 +149,7 @@ class MongodbCacheStorage(CacheStorage):
 
     def close_spider(self, spider):
         del self.fs[spider]
-
-    def __del__(self):
-        if hasattr(self, 'db'):
-            self.db.connection.close()
+        self.client.close()
 
     def retrieve_response(self, spider, request):
         key = self._request_key(spider, request)
