@@ -2,9 +2,9 @@
 
 A MongoDB Cache Storage backend which stores responses using GridFS.
 """
-import os
 import logging
 from time import time
+import warnings
 
 from scrapy.responsetypes import responsetypes
 from scrapy.exceptions import NotConfigured
@@ -25,9 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 def get_database(settings):
-    """Return Mongo database based on the given settings, also pulling the
-    mongo host, port and database form the environment variables if they're not
-    defined in the settings.
+    """ Return Mongo database based on the given settings.
 
     HOST may be a 'mongodb://' URI string, in which case it will override any
     set PORT and DATABASE parameters.
@@ -41,25 +39,28 @@ def get_database(settings):
     any kwargs will be passed on to the MongoClient call (e.g. for ssl setup).
     """
 
+    # Deprecate any non-prefixed options, as they might conflict with
+    # settings for a MongoDB ItemPipeline, or other use-case.
+    if any(s in settings for s in
+            ('MONGO_HOST', 'MONGO_PORT', 'MONGO_DATABASE', 'MONGO_USERNAME', 'MONGO_PASSWORD')
+        ):
+        warnings.warn('MONGO_* setting variables are deprecated in '
+                'MongodbCacheStorage, use HTTPCACHE_MONGO_* instead.',
+                DeprecationWarning, stacklevel=2)
     conf = {
         'host': settings['HTTPCACHE_MONGO_HOST'] \
                 or settings['MONGO_HOST'] \
-                or os.environ.get('MONGO_HOST')
                 or 'localhost',
         'port': settings.getint('HTTPCACHE_MONGO_PORT') \
                 or settings.getint('MONGO_PORT') \
-                or int(os.environ.get('MONGO_PORT', '27017')) \
                 or 27017,
         'db': settings['HTTPCACHE_MONGO_DATABASE'] \
                 or settings['MONGO_DATABASE'] \
-                or os.environ.get('MONGO_DATABASE') \
                 or settings['BOT_NAME'],
         'user': settings['HTTPCACHE_MONGO_USERNAME'] \
-                or settings['MONGO_USERNAME'] \
-                or os.environ.get('MONGO_USERNAME'),
+                or settings['MONGO_USERNAME'],
         'password': settings['HTTPCACHE_MONGO_PASSWORD'] \
-                or settings['MONGO_PASSWORD'] \
-                or os.environ.get('MONGO_PASSWORD'),
+                or settings['MONGO_PASSWORD'],
     }
     # Support passing any other options to MongoClient;
     # options passed as "positional arguments" take precedence
@@ -70,8 +71,8 @@ def get_database(settings):
 
 
 class MongodbCacheStorage(CacheStorage):
-    """Storage backend for Scrapy HTTP cache, which stores responses in MongoDB
-    GridFS.
+    """ Storage backend for Scrapy HTTP cache, which stores responses in
+    MongoDB GridFS.
 
     If HTTPCACHE_SHARDED is True, a different collection will be used for
     each spider, similar to FilesystemCacheStorage using folders per spider.
@@ -99,7 +100,10 @@ class MongodbCacheStorage(CacheStorage):
 
         try:
             # try to use a database passed as a 'mongodb://' URI string
-            self.db = client.get_default_database()
+            if hasattr(client, 'get_database'): # pymongo 3.5+ rename
+                self.db = client.get_database()
+            else:
+                self.db = client.get_default_database()
         except ConfigurationError:
             # fall back to passed 'HTTPCACHE_MONGO_*' options
             self.db = client[db]
