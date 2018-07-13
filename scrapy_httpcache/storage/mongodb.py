@@ -42,13 +42,24 @@ def get_database(settings):
     # Deprecate any non-prefixed options, as they might conflict with
     # settings for a MongoDB ItemPipeline, or other use-case.
     if any(s in settings for s in
-            ('MONGO_HOST', 'MONGO_PORT', 'MONGO_DATABASE', 'MONGO_USERNAME', 'MONGO_PASSWORD')
+            ('MONGO_HOST', 'MONGO_PORT', 'MONGO_DATABASE', 'MONGO_USERNAME',
+             'MONGO_PASSWORD')
         ):
-        warnings.warn('MONGO_* setting variables are deprecated in '
-                'MongodbCacheStorage, use HTTPCACHE_MONGO_* instead.',
+        warnings.warn('MONGO_* database settings are deprecated, '
+                'use a \'HTTPCACHE_MONGO_URI = "mongodb://*"\' URI string instead.',
+                DeprecationWarning, stacklevel=2)
+    # Deprecate 'HTTPCACHE_MONGO_*' options in favor of simpler db URI configuration
+    if any(s in settings for s in
+            ('HTTPCACHE_MONGO_HOST', 'HTTPCACHE_MONGO_PORT',
+             'HTTPCACHE_MONGO_DATABASE', 'HTTPCACHE_MONGO_USERNAME',
+             'HTTPCACHE_MONGO_PASSWORD')
+        ):
+        warnings.warn('HTTPCACHE_MONGO_* database settings are deprecated, '
+                'use a \'HTTPCACHE_MONGO_URI = "mongodb://*"\' URI string instead.',
                 DeprecationWarning, stacklevel=2)
     conf = {
         'host': settings['HTTPCACHE_MONGO_HOST'] \
+                or settings['HTTPCACHE_MONGO_URI'] \
                 or settings['MONGO_HOST'] \
                 or 'localhost',
         'port': settings.getint('HTTPCACHE_MONGO_PORT') \
@@ -62,11 +73,8 @@ def get_database(settings):
         'password': settings['HTTPCACHE_MONGO_PASSWORD'] \
                 or settings['MONGO_PASSWORD'],
     }
-    # Support passing any other options to MongoClient;
-    # options passed as "positional arguments" take precedence
-    kwargs = settings.getdict('HTTPCACHE_MONGO_CONFIG', None) \
-                or settings.getdict('MONGO_CONFIG')
-    conf.update(kwargs)
+    # Pass any other options to MongoClient using a dict
+    conf.update(settings.getdict('HTTPCACHE_MONGO_CONFIG'))
     return conf
 
 
@@ -80,7 +88,7 @@ class MongodbCacheStorage(CacheStorage):
 
     def __init__(self, settings, **kw):
         if MongoClient is None:
-            raise NotConfigured('%s is missing pymongo or gridfs module.' %
+            raise NotConfigured('%s depends on the pymongo and gridfs modules.' %
                                 self.__class__.__name__)
         if mongo_version < (2, 6, 0):
             version = '.'.join('%s'% v for v in mongo_version)
@@ -89,6 +97,7 @@ class MongodbCacheStorage(CacheStorage):
         super(MongodbCacheStorage, self).__init__(settings)
         self.sharded = settings.getbool('HTTPCACHE_SHARDED', False)
         kwargs = get_database(settings)
+        # options passed as "positional arguments" take precedence
         kwargs.update(kw)
         db = kwargs.pop('db')
         user = kwargs.pop('user', None)
@@ -165,7 +174,7 @@ class MongodbCacheStorage(CacheStorage):
         return gf
 
     def _request_key(self, spider, request):
-        rfp = self._request_key(request)
+        rfp = super(MongodbCacheStorage, self)._request_key(request)
         # We could disable the namespacing in sharded mode (old behaviour),
         # but keeping it allows us to merge collections later without
         # worrying about key conflicts.
