@@ -203,6 +203,23 @@ class PlyvelLeveldbStorageTest(DefaultStorageTest):
         with self._storage() as storage:
             self.assertEqual(storage.dbmodule.__name__, self.db_module)
 
+class PlyvelDeltaLeveldbStorageTest(DefaultStorageTest):
+
+    pytest.importorskip('plyvel')
+    pytest.importorskip('bsdiff4')
+    storage_class = 'scrapy_httpcache.storage.DeltaLeveldbCacheStorage'
+
+    db_module = 'plyvel'
+
+    def _get_settings(self, **new_settings):
+        new_settings.setdefault('HTTPCACHE_DB_MODULE', self.db_module)
+        return super(PlyvelDeltaLeveldbStorageTest, self)._get_settings(**new_settings)
+
+    def test_custom_db_module_loaded(self):
+        # make sure our db module has been loaded
+        with self._storage() as storage:
+            self.assertEqual(storage.dbmodule.__name__, self.db_module)
+
 
 # TODO:
 # https://github.com/mongomock/mongomock

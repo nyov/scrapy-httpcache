@@ -109,27 +109,13 @@ class LeveldbCacheStorage(CacheStorage):
             return pickle.loads(data)
 
 
-class DeltaLeveldbCacheStorage(object):
+class DeltaLeveldbCacheStorage(LeveldbCacheStorage):
 
     def __init__(self, settings):
-        import leveldb
+        super(DeltaLeveldbCacheStorage, self).__init__(settings)
         import bsdiff4
-        self._leveldb = leveldb
-        self._bsdiff = bsdiff4
-        self.cachedir = data_path(settings['HTTPCACHE_DIR'], createdir=True)
-        self.expiration_secs = settings.getint('HTTPCACHE_EXPIRATION_SECS')
-        self.db = None
+        self.diffmodule = bsdiff4
         self.response_to_cache = ['status', 'url', 'headers', 'body']
-
-    def open_spider(self, spider):
-        dbpath = os.path.join(self.cachedir, '%s.leveldb' % spider.name)
-        self.db = self._leveldb.LevelDB(dbpath)
-
-    def close_spider(self, spider):
-        # Do compactation each time to save space and also recreate files to
-        # avoid them being removed in storages with timestamp-based autoremoval.
-        self.db.CompactRange()
-        del self.db
 
     def retrieve_response(self, spider, request):
         domain = self._parse_domain_from_url(spider, request)
@@ -140,7 +126,7 @@ class DeltaLeveldbCacheStorage(object):
         delta_response = self._read_data(request_to_use=request)
         if sources and delta_response:
             sources = pickle.loads(sources)
-            target_key = self._request_key(request)
+            target_key = to_bytes(self._request_key(request))
             if target_key in sources:
                 serial_response = delta_response
             else:
@@ -156,7 +142,7 @@ class DeltaLeveldbCacheStorage(object):
         return response
 
     def store_response(self, spider, request, response):
-        target_key = self._request_key(request)
+        target_key = to_bytes(self._request_key(request))
         response = self._decompress(response)
         target_response = self._serialize(response)
         original_length = None
@@ -174,15 +160,22 @@ class DeltaLeveldbCacheStorage(object):
                 sources[source_key].add(target_key)
         else:
             sources = {target_key: set()}
-        batch = self._leveldb.WriteBatch()
-        batch.Put(target_key + b'_data', target_response)
-        batch.Put(target_key + b'_time', to_bytes(str(time())))
-        batch.Put(domain + b'_data', pickle.dumps(sources, protocol=2))
-        batch.Put(domain + b'_time', to_bytes(str(time())))
-        self.db.Write(batch)
+        if self.dbdriver == 'plyvel':
+            with self.db.write_batch() as batch:
+                batch.put(target_key + b'_data', target_response)
+                batch.put(target_key + b'_time', to_bytes(str(time())))
+                batch.put(domain + b'_data', pickle.dumps(sources, protocol=2))
+                batch.put(domain + b'_time', to_bytes(str(time())))
+        elif self.dbdriver == 'leveldb':
+            batch = self.dbmodule.WriteBatch()
+            batch.Put(target_key + b'_data', target_response)
+            batch.Put(target_key + b'_time', to_bytes(str(time())))
+            batch.Put(domain + b'_data', pickle.dumps(sources, protocol=2))
+            batch.Put(domain + b'_time', to_bytes(str(time())))
+            self.db.Write(batch)
 
     def _parse_domain_from_url(self, spider, request):
-        return urlparse_cached(request).hostname or spider.name
+        return to_bytes( urlparse_cached(request).hostname or spider.name )
 
     def _select_source(self, target, sources):
         return sources.keys()[0]
@@ -192,7 +185,7 @@ class DeltaLeveldbCacheStorage(object):
             old_response = self._read_data(key_to_use=target_key, ignore_time=True)
             target_response = self._decode_response(old_response, old_source)
             new_delta = self._encode_response(target_response, new_source)
-            batch = self._leveldb.WriteBatch()
+            batch = self.dbmodule.WriteBatch()
             batch.Put(target_key + b'_data', new_delta)
             self.db.Write(batch)
 
@@ -206,11 +199,11 @@ class DeltaLeveldbCacheStorage(object):
         return response
 
     def _encode_response(self, target, source):
-        delta_contents = self._bsdiff.diff(source, target)
+        delta_contents = self.diffmodule.diff(source, target)
         return delta_contents
 
     def _decode_response(self, delta, source):
-        restored_contents = self._bsdiff.patch(source, delta)
+        restored_contents = self.diffmodule.patch(source, delta)
         return restored_contents
 
     def _serialize(self, response):
@@ -253,22 +246,31 @@ class DeltaLeveldbCacheStorage(object):
 
     def _read_data(self, request_to_use=None, key_to_use=None, ignore_time=False):
         if key_to_use:
-            key = key_to_use
+            key = to_bytes(key_to_use)
         else:
-            key = self._request_key(request_to_use)
+            key = to_bytes(self._request_key(request_to_use))
         if not ignore_time:
             try:
-                ts = self.db.Get(key + b'_time')
+                if self.dbdriver == 'plyvel':
+                    ts = self.db.get(key + b'_time')
+                    if ts is None:
+                        raise KeyError
+                elif self.dbdriver == 'leveldb':
+                    ts = self.db.Get(key + b'_time')
             except KeyError:
                 return  # not found or invalid entry
-            if 0 < self.expiration_secs < time() - float(ts):
-                return  # expired
+
+            if self._is_expired(ts):
+                return
+
         try:
-            data = self.db.Get(key + b'_data')
+            if self.dbdriver == 'plyvel':
+                data = self.db.get(key + b'_data')
+                if data is None:
+                    raise KeyError
+            elif self.dbdriver == 'leveldb':
+                data = self.db.Get(key + b'_data')
         except KeyError:
             return  # invalid entry
         else:
             return data
-
-    def _request_key(self, request):
-        return to_bytes(request_fingerprint(request))
