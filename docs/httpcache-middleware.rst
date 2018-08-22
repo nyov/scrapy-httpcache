@@ -10,10 +10,11 @@ HttpCacheMiddleware
     This middleware provides low-level cache to all HTTP requests and responses.
     It has to be combined with a cache storage backend as well as a cache policy.
 
-    Scrapy ships with three HTTP cache storage backends:
+    The scrapy-httpcache extension ships with multiple cache storage backends:
 
         * :ref:`httpcache-storage-fs`
         * :ref:`httpcache-storage-dbm`
+        * :ref:`httpcache-storage-sqlite`
         * :ref:`httpcache-storage-leveldb`
 
     You can change the HTTP cache storage backend with the :setting:`HTTPCACHE_STORAGE`
@@ -21,8 +22,8 @@ HttpCacheMiddleware
 
     Scrapy ships with two HTTP cache policies:
 
-        * :ref:`httpcache-policy-rfc2616`
         * :ref:`httpcache-policy-dummy`
+        * :ref:`httpcache-policy-rfc2616`
 
     You can change the HTTP cache policy with the :setting:`HTTPCACHE_POLICY`
     setting. Or you can also implement your own policy.
@@ -141,6 +142,25 @@ In order to use this storage backend, set:
 
 * :setting:`HTTPCACHE_STORAGE` to ``scrapy_httpcache.storage.DbmCacheStorage``
 
+.. _DBM: https://en.wikipedia.org/wiki/Dbm
+.. _anydbm: https://docs.python.org/2/library/anydbm.html
+
+.. _httpcache-storage-sqlite:
+
+SQLite3 storage backend
+~~~~~~~~~~~~~~~~~~~~~~~
+
+An SQLite_ storage backend is also available for the HTTP cache middleware.
+
+This backend uses the ``sqlite3`` stdlib module, which makes it a good default
+where 3rd-party modules are unavailable or to be avoided.
+
+In order to use this storage backend, set:
+
+* :setting:`HTTPCACHE_STORAGE` to ``scrapy_httpcache.storage.SqliteCacheStorage``
+
+.. _SQLite: https://docs.python.org/3/library/sqlite3.html
+
 .. _httpcache-storage-leveldb:
 
 LevelDB storage backend
@@ -156,7 +176,7 @@ In order to use this storage backend:
 
 * set :setting:`HTTPCACHE_STORAGE` to ``scrapy_httpcache.storage.LeveldbCacheStorage``
 * install `LevelDB python bindings`_ like ``pip install leveldb``
-* or use the `Plyvel bindings`_ like ``pip install plyvel``
+* or use the `Plyvel bindings`_ with ``pip install plyvel``
 
 .. _LevelDB: https://github.com/google/leveldb
 .. _leveldb python bindings: https://pypi.python.org/pypi/leveldb

@@ -154,6 +154,11 @@ class DbmStorageWithCustomDbmModuleTest(DbmStorageTest):
             self.assertEqual(storage.dbmodule.__name__, self.dbm_module)
 
 
+class SqliteStorageTest(DefaultStorageTest):
+
+    storage_class = 'scrapy_httpcache.storage.SqliteCacheStorage'
+
+
 class LeveldbStorageTest(DefaultStorageTest):
 
     pytest.importorskip('leveldb')
