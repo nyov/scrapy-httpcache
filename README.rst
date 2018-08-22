@@ -23,9 +23,18 @@ scrapy_ 1.0.0 or newer.
 Installation
 ============
 
-Install scrapy-httpcache using ``pip``::
+Install scrapy-httpcache using ``pip``/``pip3``::
 
-    $ pip install scrapy-httpcache
+    $ pip install https://github.com/nyov/scrapy-httpcache/archive/master.tar.gz
+
+    (The package is not available from PyPI at this time, sorry.)
+
+Install scrapy-httpcache using ``git``::
+
+    $ git clone https://github.com/nyov/scrapy-httpcache.git
+    $ pip install --user --upgrade scrapy-httpcache/
+
+    (Note the important slash here after the directory name.)
 
 
 Configuration
