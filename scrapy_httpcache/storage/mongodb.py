@@ -5,7 +5,6 @@ A MongoDB Cache Storage backend which stores responses using GridFS.
 import logging
 from time import time
 import warnings
-import six
 
 from scrapy.responsetypes import responsetypes
 from scrapy.exceptions import NotConfigured
@@ -14,10 +13,9 @@ from scrapy.http import Headers
 from .base import CacheStorage
 
 try:
-    from pymongo import MongoClient, MongoReplicaSetClient
-    from pymongo.errors import ConfigurationError
+    from pymongo import MongoClient, MongoReplicaSetClient, errors
     from pymongo import version_tuple as mongo_version
-    from gridfs import GridFS, errors
+    from gridfs import GridFS, errors as gfserrors
 except ImportError:
     MongoClient = None
 
@@ -85,14 +83,9 @@ class MongodbCacheStorage(CacheStorage):
 
     If HTTPCACHE_SHARDED is True, a different collection will be used for
     each spider, similar to FilesystemCacheStorage using folders per spider.
-
-    WARNING: Is not yet Python3 compatible!
     """
 
     def __init__(self, settings, **kw):
-        if six.PY3:
-            raise NotConfigured('%s is not yet Python3 compatible!' %
-                                self.__class__.__name__)
         if MongoClient is None:
             raise NotConfigured('%s depends on the pymongo and gridfs modules.' %
                                 self.__class__.__name__)
@@ -125,7 +118,7 @@ class MongodbCacheStorage(CacheStorage):
                 self.db = client.get_default_database()
             else:
                 self.db = client.get_database()
-        except ConfigurationError:
+        except errors.ConfigurationError:
             # fall back to passed 'HTTPCACHE_MONGO_*' options
             self.db = client[db]
 
@@ -158,7 +151,7 @@ class MongodbCacheStorage(CacheStorage):
             return # not cached
         url = str(gf.url)
         status = str(gf.status)
-        headers = Headers([(x, map(str, y)) for x, y in gf.headers.iteritems()])
+        headers = Headers(gf.headers)
         body = gf.read()
         respcls = responsetypes.from_args(headers=headers, url=url)
         response = respcls(url=url, headers=headers, status=status, body=body)
@@ -171,18 +164,18 @@ class MongodbCacheStorage(CacheStorage):
             'time': time(),
             'status': response.status,
             'url': response.url,
-            'headers': dict(response.headers),
+            'headers': dict(response.headers.to_unicode_dict()),
         }
         try:
             self.fs[spider].put(response.body, **metadata)
-        except errors.FileExists:
+        except (errors.DuplicateKeyError, gfserrors.FileExists):
             self.fs[spider].delete(key)
             self.fs[spider].put(response.body, **metadata)
 
     def _get_file(self, spider, key):
         try:
             gf = self.fs[spider].get(key)
-        except errors.NoFile:
+        except gfserrors.NoFile:
             return # not found
         if self._is_expired(gf.time):
             return
